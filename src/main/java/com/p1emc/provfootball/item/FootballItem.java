@@ -1,5 +1,7 @@
 package com.p1emc.provfootball.item;
 
+import com.p1emc.provfootball.PlayerMomentumTracker;
+import com.p1emc.provfootball.ProvFootball;
 import com.p1emc.provfootball.entity.FootballEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -22,8 +24,20 @@ public class FootballItem extends Item {
     }
 
 
+
     @Override
     public InteractionResult useOn(UseOnContext context) {
+
+        Player player = context.getPlayer();
+
+        if (player == null) {
+            return InteractionResult.PASS;
+        }
+
+        if (!player.isCrouching() || player.getCooldowns().isOnCooldown(this)) {
+            return InteractionResult.PASS;
+        }
+
         Level level = context.getLevel();
 
 
@@ -39,40 +53,46 @@ public class FootballItem extends Item {
         FootballEntity ball = new FootballEntity(level, pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D);
         serverLevel.addFreshEntity(ball);
 
-        Player player = context.getPlayer();
-        if (player != null) {
-
-            context.getItemInHand().consume(1, player);
-        }
+        context.getItemInHand().consume(1, player);
 
 
         return InteractionResult.CONSUME;
     }
 
+    //Edit this to change the throwing power
+    private static final double THROW_SPEED = 0.5D;
+
+    //Momentum added by walking and sprinting, then multiplied by this
+    private static final double MOMENTUM_SCALE = 0.5D;
 
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
 
+
+        if (player.getCooldowns().isOnCooldown(this)) {
+            return InteractionResultHolder.pass(stack);
+        }
+
         if (level instanceof ServerLevel serverLevel) {
-
             Vec3 look = player.getLookAngle();
-
-
             Vec3 spawn = player.getEyePosition().add(look.x, -0.45D, look.z);
 
             FootballEntity ball = new FootballEntity(level, spawn.x, spawn.y, spawn.z);
 
+            Vec3 momentum = PlayerMomentumTracker.get(player);
 
-            ball.setDeltaMovement(look.x * 0.3D, 0.1D, look.z * 0.3D);
+            ProvFootball.LOGGER.info("momentum={} sprinting={} pitch={}",
+                    momentum.length(), player.isSprinting(), player.getXRot());
+
+
+            ball.setDeltaMovement(look.scale(THROW_SPEED).add(momentum.scale(MOMENTUM_SCALE)));
 
             serverLevel.addFreshEntity(ball);
             stack.consume(1, player);
         }
 
-
         player.awardStat(Stats.ITEM_USED.get(this));
-
         return InteractionResultHolder.sidedSuccess(stack, level.isClientSide());
     }
 }

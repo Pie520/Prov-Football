@@ -2,6 +2,7 @@ package com.p1emc.provfootball;
 
 import com.p1emc.provfootball.entity.ModEntities;
 import com.p1emc.provfootball.item.ModItems;
+import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import net.neoforged.bus.api.IEventBus;
@@ -19,5 +20,13 @@ public class ProvFootball {
         ModItems.ITEMS.register(modEventBus);
         ModEntities.ENTITY_TYPES.register(modEventBus);
     //    ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
+
+
+        modEventBus.addListener(this::addCreative);
+
+    }
+
+    private void addCreative(BuildCreativeModeTabContentsEvent event) {
+
     }
 }

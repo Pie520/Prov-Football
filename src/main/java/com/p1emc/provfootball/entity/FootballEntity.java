@@ -33,7 +33,7 @@ public class FootballEntity extends Entity {
     //higher = stronger gravity
     private static final double GRAVITY = 0.045D;
     // lose % per tick per unit of speed
-    private static final double DRAG_COEFFICIENT = 0.05D;
+    private static final double DRAG_COEFFICIENT = 0.03D;
     //Higher means ball travels further
     private static final double GROUND_FRICTION = 0.93D;
 
@@ -50,7 +50,7 @@ public class FootballEntity extends Entity {
     private static final double BOUNCE_CROSS_AXIS = 0.85D;
     private static final double WALL_CROSS_AXIS = 0.9D;
     //Below this value speed is set to 0, avoids infinite sliding
-    private static final double REST_THRESHOLD = 0.003D;
+    private static final double REST_THRESHOLD = 0.005D;
 
     // --- passing ---
     // Weaker shots, higher value here means stronger shot
@@ -138,6 +138,12 @@ public class FootballEntity extends Entity {
     public float roll;
     public float rollPrev;
     public float rollAxis;
+
+    // Degrees per tick the ball is currently spinning
+    private float rollSpeed;
+
+    // How fast the spin bleeds away once the ball has stopped.
+    private static final float ROLL_DECAY = 0.8F;
 
     // ------------------------------------------------------------------
     // State
@@ -350,14 +356,14 @@ public class FootballEntity extends Entity {
 
         // Multiplication approaches zero without arriving, so the ball would creep
         // imperceptibly forever. Snap it.
-        if (Math.abs(nx) < REST_THRESHOLD) nx = 0.0D;
-        if (Math.abs(nz) < REST_THRESHOLD) nz = 0.0D;
+        if (Math.sqrt(nx * nx + nz * nz) < REST_THRESHOLD) {
+            nx = 0.0D;
+            nz = 0.0D;
+        }
         if (this.onGround() && Math.abs(ny) < 0.05D) ny = 0.0D;
 
         // --- curve (Magnus effect) ------------------------------------------
-        // A spinning ball is pushed sideways, and the force scales with speed. A
-        // driven ball curves hard, a slow roller barely bends -- which is what
-        // people expect without being told.
+        // A spinning ball is pushed sideways, and the force scales with speed
         if (Math.abs(this.spin) > 1.0E-4F) {
             double speed = Math.sqrt(nx * nx + nz * nz);
 
@@ -375,7 +381,7 @@ public class FootballEntity extends Entity {
         }
 
         // Scale all three axes together so a capped ball still travels exactly
-        // where it was aimed -- just slower.
+        // where it was aimed
         double speed = Math.sqrt(nx * nx + ny * ny + nz * nz);
         if (speed > MAX_SPEED) {
             double scale = MAX_SPEED / speed;
@@ -436,7 +442,6 @@ public class FootballEntity extends Entity {
             // Away from the player, horizontal only.
             Vec3 away = new Vec3(this.getX() - player.getX(), 0.0D, this.getZ() - player.getZ());
             if (away.lengthSqr() < 1.0E-4D) {
-                // Dead centre -- fall back to their facing so the ball still escapes.
                 away = player.getLookAngle().multiply(1.0D, 0.0D, 1.0D);
             }
             away = away.normalize();
@@ -466,20 +471,29 @@ public class FootballEntity extends Entity {
         this.rollPrev = this.roll;
 
         double horizontalSpeed = Math.sqrt(vx * vx + vz * vz);
-        if (horizontalSpeed > 1.0E-4D) {
-            // Direction of travel as an angle from +X, in degrees. The renderer
-            // needs this to know which axis to spin about.
+
+        // Axis freezes early. Below this, one axis can still be dying faster than
+        // the other and atan2 swings around, which snaps the whole orientation.
+        if (horizontalSpeed > 0.02D) {
             this.rollAxis = (float) (Mth.atan2(vz, vx) * (180.0D / Math.PI));
+        }
 
+        // Speed tracks the actual velocity right down to a stop, then eases out.
+        if (horizontalSpeed > 1.0E-4D) {
             double circumference = Math.PI * this.getBbWidth();
-            this.roll += (float) (horizontalSpeed / circumference * 360.0D);
-
-            // Keep the value bounded without breaking the delta the renderer
-            // interpolates across -- subtracting from both preserves the gap.
-            if (this.roll > 360.0F) {
-                this.roll -= 360.0F;
-                this.rollPrev -= 360.0F;
+            this.rollSpeed = (float) (horizontalSpeed / circumference * 360.0D);
+        } else {
+            this.rollSpeed *= ROLL_DECAY;
+            if (this.rollSpeed < 0.01F) {
+                this.rollSpeed = 0.0F;
             }
+        }
+
+        this.roll += this.rollSpeed;
+
+        if (this.roll > 360.0F) {
+            this.roll -= 360.0F;
+            this.rollPrev -= 360.0F;
         }
     }
 

@@ -46,6 +46,9 @@ public class ModNetworking {
         // a race condition waiting to happen.
         context.enqueueWork(() -> {
             Player player = context.player();
+
+            PlayerChargeTracker.clear(player);
+
             PlayerChargeTracker.setCharging(player, true);
             float pitch = Mth.clamp(payload.pitch(), -90.0F, 90.0F);
             PlayerChargeTracker.setStartPitch(player, pitch);

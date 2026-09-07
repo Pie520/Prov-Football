@@ -3,7 +3,11 @@ package com.p1emc.provfootball.events;
 import com.p1emc.provfootball.ChargeConstants;
 import com.p1emc.provfootball.ProvFootball;
 import com.p1emc.provfootball.network.ChargeCancelPayload;
+import net.minecraft.core.particles.DustParticleOptions;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -11,6 +15,7 @@ import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
 import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
+import org.joml.Vector3f;
 
 import java.util.Map;
 import java.util.UUID;
@@ -31,6 +36,8 @@ public class PlayerChargeTracker {
     private static final Map<UUID, Integer> GRACE = new ConcurrentHashMap<>();
 
     private static final Map<UUID, Float> START_PITCH = new ConcurrentHashMap<>();
+
+    private static final Map<UUID, Integer> HELD_TICKS = new ConcurrentHashMap<>();
 
     public static void setStartPitch(Player player, float pitch) {
         START_PITCH.put(player.getUUID(), pitch);
@@ -68,6 +75,7 @@ public class PlayerChargeTracker {
         CHARGING.remove(id);
         GRACE.remove(id);
         START_PITCH.remove(id);
+        HELD_TICKS.remove(id);
     }
 
 
@@ -85,6 +93,21 @@ public class PlayerChargeTracker {
         if (player.level().isClientSide()) return;
 
         UUID id = player.getUUID();
+
+        if (isCharging(player)) {
+            int held = HELD_TICKS.merge(id, 1, Integer::sum);
+
+            //Tick limit to prevent trails (timeout)
+            if (held > ChargeConstants.MAX_CHARGE + 300) {
+                setCharging(player, false);
+                HELD_TICKS.remove(id);
+            }else if (player.level() instanceof ServerLevel serverLevel) {
+                spawnChargeParticles(serverLevel, player, held);
+            }
+        } else {
+            HELD_TICKS.remove(id);
+        }
+
 
         Integer grace = GRACE.get(id);
         if (grace != null && grace > 0) {
@@ -120,6 +143,61 @@ public class PlayerChargeTracker {
         }
     }
 
+
+
+    // Ring radius around the player's feet. Wide enough to read from across the
+// pitch without swallowing them.
+    private static final double PARTICLE_RADIUS = 0.55D;
+    public static final float ZONE_AMBER = 0.34F;
+    public static final float ZONE_RED = 0.67F;
+
+    /**
+     * Charge particle system
+     */
+
+
+
+
+    private static void spawnChargeParticles(ServerLevel level, Player player, int heldTicks) {
+        float progress = Mth.clamp(
+                (float) heldTicks / ChargeConstants.MAX_CHARGE, 0.0F, 1.0F);
+
+        // Nothing until the shot is actually viable
+        if (heldTicks < ChargeConstants.MIN_CHARGE) {
+            return;
+        }
+
+        // One particle at minimum, four at full.
+        int count = 1 + Math.round(progress * 3.0F);
+
+        for (int i = 0; i < count; i++) {
+            // Spread them round the player rather than stacking on one side.
+            double angle = level.random.nextDouble() * Math.PI * 2.0D;
+            double x = player.getX() + Math.cos(angle) * PARTICLE_RADIUS;
+            double z = player.getZ() + Math.sin(angle) * PARTICLE_RADIUS;
+
+            // Rises up the body as the charge builds
+            double y = player.getY() + 0.1D + progress * level.random.nextDouble() * 1.2D;
+
+// Progress through the USABLE range
+
+            float usable = (float) (heldTicks - ChargeConstants.MIN_CHARGE)
+                    / (ChargeConstants.MAX_CHARGE - ChargeConstants.MIN_CHARGE);
+
+            float r, g, b;
+            if (usable >= ZONE_RED) {
+                r = 1.0F; g = 0.2F; b = 0.2F;
+            } else if (usable >= ZONE_AMBER) {
+                r = 1.0F; g = 0.75F; b = 0.15F;
+            } else {
+                r = 0.25F; g = 1.0F; b = 0.3F;
+            }
+
+            DustParticleOptions dust = new DustParticleOptions(new Vector3f(r, g, b), 1.2F);
+            level.sendParticles(dust, x, y, z, 1, 0.0D, 0.04D, 0.0D, 0.0D);
+
+        }
+    }
 
 
 

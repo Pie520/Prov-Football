@@ -4,6 +4,9 @@ import com.p1emc.provfootball.ChargeConstants;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphics;
 
+import static com.p1emc.provfootball.events.PlayerChargeTracker.ZONE_AMBER;
+import static com.p1emc.provfootball.events.PlayerChargeTracker.ZONE_RED;
+
 public class ChargeHudOverlay {
 
     private static final int BAR_WIDTH = 80;
@@ -19,14 +22,13 @@ public class ChargeHudOverlay {
     private static final int COLOUR_BACKGROUND = 0xC0000000;  // translucent black
     private static final int COLOUR_BORDER     = 0xFF202020;
     private static final int COLOUR_WEAK       = 0xFF9E9E9E;  // grey, below minimum
-    private static final int COLOUR_READY      = 0xFFE53935; // red
+    private static final int COLOUR_READY      = 0xFF42b528;  // green
     private static final int COLOUR_HIGH = 0xFFFFC107;  // amber
-    private static final int COLOUR_FULL       = 0xFF42b528;  // green
+    private static final int COLOUR_FULL       = 0xFFE53935; // red
 // red
 
     // Where the amber turns red. Not full charge -- a little warning before the
     // cap reads better than a colour that only appears at the very end.
-    private static final float NEAR_FULL = 0.6F;
 
     public static void render(GuiGraphics guiGraphics, DeltaTracker delta) {
         int charge = ChargeTracker.getCharge();
@@ -57,15 +59,21 @@ public class ChargeHudOverlay {
 
         int colour;
         if (charge < ChargeConstants.MIN_CHARGE) {
-            // Grey until the shot is actually viable, so the player can see the
-            // threshold rather than having to learn it.
             colour = COLOUR_WEAK;
-        } else if (progress >= (1)) {
-            colour = COLOUR_FULL;
-        } else if (progress >= (NEAR_FULL)){
-            colour = COLOUR_HIGH;
         } else {
-            colour = COLOUR_READY;
+            // Same measure the particles use: progress through the USABLE range, not
+            // the whole bar. The dead ticks below MIN_CHARGE are excluded so the bands
+            // line up with what defenders see.
+            float usable = (float) (charge - ChargeConstants.MIN_CHARGE)
+                    / (ChargeConstants.MAX_CHARGE - ChargeConstants.MIN_CHARGE);
+
+            if (usable >= ZONE_RED) {
+                colour = COLOUR_FULL;
+            } else if (usable >= ZONE_AMBER) {
+                colour = COLOUR_HIGH;
+            } else {
+                colour = COLOUR_READY;
+            }
         }
 
         if (filled > 0) {

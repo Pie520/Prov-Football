@@ -25,14 +25,15 @@ public class ChargeTracker {
 
         boolean held = ModKeyBindings.CHARGE_SHOT.isDown();
 
-        // Fire on the TRANSITION, not while held -- otherwise you send a packet
-        // every tick for as long as the key is down.
         if (held && !wasHeld) {
+
+            charge = 0;
+            grace = 0;
             float pitch = Minecraft.getInstance().player.getXRot();
             PacketDistributor.sendToServer(new ChargeStartPayload(pitch));
         }
 
-        if (!held && wasHeld && charge >= ChargeConstants.MIN_CHARGE) {
+        if (!held && wasHeld) {
             PacketDistributor.sendToServer(new ChargeReleasePayload(charge));
             grace = ChargeConstants.RELEASE_GRACE;
         }

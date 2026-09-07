@@ -4,6 +4,7 @@ import com.p1emc.provfootball.ChargeConstants;
 import com.p1emc.provfootball.ProvFootball;
 import com.p1emc.provfootball.network.ChargeReleasePayload;
 import com.p1emc.provfootball.network.ChargeStartPayload;
+import net.minecraft.client.Minecraft;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -27,7 +28,8 @@ public class ChargeTracker {
         // Fire on the TRANSITION, not while held -- otherwise you send a packet
         // every tick for as long as the key is down.
         if (held && !wasHeld) {
-            PacketDistributor.sendToServer(new ChargeStartPayload());
+            float pitch = Minecraft.getInstance().player.getXRot();
+            PacketDistributor.sendToServer(new ChargeStartPayload(pitch));
         }
 
         if (!held && wasHeld && charge >= ChargeConstants.MIN_CHARGE) {

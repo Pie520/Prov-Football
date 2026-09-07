@@ -48,6 +48,8 @@ public class FootballRenderer extends EntityRenderer<FootballEntity> {
         float centre = 1F + entity.getBbHeight() / 2.0F;
         poseStack.translate(0.0F, centre, 0.0F);
 
+        poseStack.mulPose(Axis.YP.rotationDegrees(-entityYaw));
+
         float axis = entity.rollAxis;
         float roll = Mth.lerp(partialTick, entity.rollPrev, entity.roll);
         poseStack.mulPose(Axis.YP.rotationDegrees(-axis));
@@ -55,6 +57,8 @@ public class FootballRenderer extends EntityRenderer<FootballEntity> {
         poseStack.mulPose(Axis.YP.rotationDegrees(axis));
 
         poseStack.translate(0.0F, -centre, 0.0F);
+
+
 
         VertexConsumer vertexConsumer = buffer.getBuffer(this.model.renderType(TEXTURE));
         this.model.renderToBuffer(poseStack, vertexConsumer, packedLight,

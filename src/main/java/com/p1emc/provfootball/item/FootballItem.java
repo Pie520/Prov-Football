@@ -50,6 +50,8 @@ public class FootballItem extends Item {
 
 
         FootballEntity ball = new FootballEntity(level, pos.getX() + 0.5D, pos.getY(), pos.getZ() + 0.5D);
+        ball.setPlacementYaw(player.getYRot());
+
         serverLevel.addFreshEntity(ball);
 
         context.getItemInHand().consume(1, player);
@@ -83,6 +85,7 @@ public class FootballItem extends Item {
 
 
             ball.setDeltaMovement(look.scale(THROW_SPEED).add(momentum.scale(MOMENTUM_SCALE)));
+
 
             serverLevel.addFreshEntity(ball);
             stack.consume(1, player);

@@ -30,6 +30,16 @@ public class PlayerChargeTracker {
 
     private static final Map<UUID, Integer> GRACE = new ConcurrentHashMap<>();
 
+    private static final Map<UUID, Float> START_PITCH = new ConcurrentHashMap<>();
+
+    public static void setStartPitch(Player player, float pitch) {
+        START_PITCH.put(player.getUUID(), pitch);
+    }
+
+    public static float getStartPitch(Player player) {
+        return START_PITCH.getOrDefault(player.getUUID(), 0.0F);
+    }
+
 
     public static void setCharging(Player player, boolean charging) {
         CHARGING.put(player.getUUID(), charging);
@@ -53,9 +63,13 @@ public class PlayerChargeTracker {
 
     // Called after a shot so one charge cannot fire twice.
     public static void clear(Player player) {
-        CHARGE.remove(player.getUUID());
-        CHARGING.remove(player.getUUID());
+        UUID id = player.getUUID();
+        CHARGE.remove(id);
+        CHARGING.remove(id);
+        GRACE.remove(id);
+        START_PITCH.remove(id);
     }
+
 
 
 

@@ -4,6 +4,7 @@ import com.p1emc.provfootball.ChargeConstants;
 import com.p1emc.provfootball.client.ClientPayloadHandler;
 import com.p1emc.provfootball.events.PlayerChargeTracker;
 import com.p1emc.provfootball.ProvFootball;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -46,7 +47,11 @@ public class ModNetworking {
         context.enqueueWork(() -> {
             Player player = context.player();
             PlayerChargeTracker.setCharging(player, true);
+            float pitch = Mth.clamp(payload.pitch(), -90.0F, 90.0F);
+            PlayerChargeTracker.setStartPitch(player, pitch);
         });
+
+
     }
 
     private static void handleRelease(ChargeReleasePayload payload, IPayloadContext context) {

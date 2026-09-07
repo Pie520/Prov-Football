@@ -32,8 +32,8 @@ public class FootballEntity extends Entity {
     // --- flight ---
     //higher = stronger gravity
     private static final double GRAVITY = 0.045D;
-    // 1 - value = % speed lost per tick, 0.99 means 1% lost per tick
-    private static final double AIR_DRAG = 0.985D;
+    // lose % per tick per unit of speed
+    private static final double DRAG_COEFFICIENT = 0.05D;
     //Higher means ball travels further
     private static final double GROUND_FRICTION = 0.93D;
 
@@ -54,9 +54,9 @@ public class FootballEntity extends Entity {
 
     // --- passing ---
     // Weaker shots, higher value here means stronger shot
-    private static final double STRIKE_POWER = 0.25D;
-    private static final double SPRINT_MOMENTUM = 0.7D;
-    private static final double WALK_MOMENTUM = 0.9D;
+    private static final double STRIKE_POWER = 0.3D;
+    private static final double SPRINT_MOMENTUM = 0.6D;
+    private static final double WALK_MOMENTUM = 1D;
 
     // Aiming up should loft the ball meaningfully. STRIKE_POWER is tuned for how
 // far a flat pass rolls, and at that magnitude the vertical component is too
@@ -70,11 +70,15 @@ public class FootballEntity extends Entity {
 
     // --- shooting ---
     private static final double SHOT_POWER_MIN = 0.65D;
-    private static final double SHOT_POWER_MAX = 1.6D;
+    private static final double SHOT_POWER_MAX = 1.4D;
+
+    // How much of the shot's power goes upward at full elevation. Under 1.0 so a
+// lofted shot still carries forward rather than going near-vertical.
+    private static final double SHOT_LIFT = 0.75D;
 
     // Hard ceiling on total speed, applied after every force this tick. Catches
 // anything that stacks, strikes, shots, bounces, Magnus
-    private static final double MAX_SPEED = 1.8D;
+    private static final double MAX_SPEED = 1.6D;
 
     // Momentum normalised, angular only
 
@@ -91,26 +95,8 @@ public class FootballEntity extends Entity {
     private static final double SPIN_POWER = 0.05D;
 
     // Lower this if the ball starts orbiting
-    private static final float SPIN_DECAY = 0.99F;
+    private static final float SPIN_DECAY = 0.98F;
 
-    // ------------------------------------------------------------------
-    // State
-    // ------------------------------------------------------------------
-
-    // Current sideways spin. Set on the strike, bled off during flight.
-    public float spin;
-
-    // Stops a fast clicker double-firing within one swing.
-    private int kickCooldown;
-
-    public FootballEntity(EntityType<? extends FootballEntity> type, Level level) {
-        super(type, level);
-    }
-
-    public FootballEntity(Level level, double x, double y, double z) {
-        this(ModEntities.FOOTBALL.get(), level);
-        this.setPos(x, y, z);
-    }
 
     // --- dribbling ---------------------------------------------------------
 // Only touch the ball when it is low enough to be at foot height. A ball at
@@ -152,6 +138,25 @@ public class FootballEntity extends Entity {
     public float roll;
     public float rollPrev;
     public float rollAxis;
+
+    // ------------------------------------------------------------------
+    // State
+    // ------------------------------------------------------------------
+
+    // Current sideways spin. Set on the strike, bled off during flight.
+    public float spin;
+
+    // Stops a fast clicker double-firing within one swing.
+    private int kickCooldown;
+
+    public FootballEntity(EntityType<? extends FootballEntity> type, Level level) {
+        super(type, level);
+    }
+
+    public FootballEntity(Level level, double x, double y, double z) {
+        this(ModEntities.FOOTBALL.get(), level);
+        this.setPos(x, y, z);
+    }
 
 
     // ------------------------------------------------------------------
@@ -240,6 +245,11 @@ public class FootballEntity extends Entity {
         this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                 ModSounds.KICK_BALL.get(), SoundSource.PLAYERS,
                 volume, 0.9F + this.random.nextFloat() * 0.2F);
+    }
+
+    public void setPlacementYaw(float yaw) {
+        this.setYRot(yaw);
+        this.yRotO = yaw;
     }
 
     // ------------------------------------------------------------------
@@ -331,8 +341,11 @@ public class FootballEntity extends Entity {
             nx *= GROUND_FRICTION;
             nz *= GROUND_FRICTION;
         } else {
-            nx *= AIR_DRAG;
-            nz *= AIR_DRAG;
+            double speed = Math.sqrt(nx * nx + nz * nz);
+            double drag = 1.0 - (DRAG_COEFFICIENT * speed);
+            drag = Math.max(drag, 0.90);   // floor, so it never reverses or stops dead
+            nx *= drag;
+            nz *= drag;
         }
 
         // Multiplication approaches zero without arriving, so the ball would creep
@@ -380,31 +393,6 @@ public class FootballEntity extends Entity {
         }
     }
 
-    /**
-     * Spins the ball at the rate it would turn if it rolled without slipping:
-     * distance travelled divided by circumference, times 360.
-     */
-    private void updateRoll(double vx, double vz) {
-        this.rollPrev = this.roll;
-
-        double horizontalSpeed = Math.sqrt(vx * vx + vz * vz);
-        if (horizontalSpeed > 1.0E-4D) {
-            // Direction of travel as an angle from +X, in degrees. The renderer
-            // needs this to know which axis to spin about.
-            this.rollAxis = (float) (Mth.atan2(vz, vx) * (180.0D / Math.PI));
-
-            double circumference = Math.PI * this.getBbWidth();
-            this.roll += (float) (horizontalSpeed / circumference * 360.0D);
-
-            // Keep the value bounded without breaking the delta the renderer
-            // interpolates across -- subtracting from both preserves the gap.
-            if (this.roll > 360.0F) {
-                this.roll -= 360.0F;
-                this.rollPrev -= 360.0F;
-            }
-        }
-    }
-
 
     /**
      * Dribbling
@@ -414,10 +402,7 @@ public class FootballEntity extends Entity {
             return;
         }
 
-        // Too high to be at foot level -- volley it instead.
-        if (this.getY() - this.getBlockY() > DRIBBLE_MAX_HEIGHT && !this.onGround()) {
-            return;
-        }
+
 
         // Already moving too fast. Control it with a strike first.
         Vec3 current = this.getDeltaMovement();
@@ -430,6 +415,11 @@ public class FootballEntity extends Entity {
                 Player.class, this.getBoundingBox().inflate(DRIBBLE_REACH))) {
 
             if (player.isSpectator()) {
+                continue;
+            }
+
+// Only touch the ball at foot height
+            if (this.getY() - player.getY() > DRIBBLE_MAX_HEIGHT) {
                 continue;
             }
 
@@ -458,11 +448,38 @@ public class FootballEntity extends Entity {
             double push = player.isSprinting() ? DRIBBLE_PUSH_SPRINT : DRIBBLE_PUSH_WALK;
 
             Vec3 kept = this.getDeltaMovement().multiply(DRIBBLE_RETAIN, 1.0D, DRIBBLE_RETAIN);
-            this.setDeltaMovement(kept.add(dir.scale(push)));            this.dribbleCooldown = DRIBBLE_COOLDOWN;
+            this.setDeltaMovement(kept.add(dir.scale(push)));
+            this.dribbleCooldown = DRIBBLE_COOLDOWN;
             this.hasImpulse = true;
 
             // One touch per cooldown, even in a crowd.
             break;
+        }
+    }
+
+
+    /**
+     * Spins the ball at the rate it would turn if it rolled without slipping:
+     * distance travelled divided by circumference, times 360.
+     */
+    private void updateRoll(double vx, double vz) {
+        this.rollPrev = this.roll;
+
+        double horizontalSpeed = Math.sqrt(vx * vx + vz * vz);
+        if (horizontalSpeed > 1.0E-4D) {
+            // Direction of travel as an angle from +X, in degrees. The renderer
+            // needs this to know which axis to spin about.
+            this.rollAxis = (float) (Mth.atan2(vz, vx) * (180.0D / Math.PI));
+
+            double circumference = Math.PI * this.getBbWidth();
+            this.roll += (float) (horizontalSpeed / circumference * 360.0D);
+
+            // Keep the value bounded without breaking the delta the renderer
+            // interpolates across -- subtracting from both preserves the gap.
+            if (this.roll > 360.0F) {
+                this.roll -= 360.0F;
+                this.rollPrev -= 360.0F;
+            }
         }
     }
 
@@ -519,10 +536,25 @@ public class FootballEntity extends Entity {
 
         double power = Mth.lerp(t, SHOT_POWER_MIN, SHOT_POWER_MAX);
 
-        this.setDeltaMovement(look.scale(power));
+        // Elevation comes from where the player was looking when they STARTED
+        // charging, not from where they are aiming now.
+        float startPitch = PlayerChargeTracker.getStartPitch(player);
+
+        // getXRot() is -90 straight up, 0 at the horizon, +90 down. Negate so that
+        // looking up is positive, then clamp: 45 degrees or more gives full lift,
+        // looking level or below gives none.
+        double elevation = Mth.clamp(-startPitch / 45.0F, 0.0D, 1.0D);
+
+        // Horizontal direction still comes from the strike itself
+        Vec3 flat = new Vec3(look.x, 0.0D, look.z).normalize();
+
+        this.setDeltaMovement(
+                flat.x * power,
+                elevation * power * SHOT_LIFT,
+                flat.z * power);
+
         applySpin(player);
         playKickSound(1f);
-
 
         PlayerChargeTracker.clear(player);
         this.hasImpulse = true;
@@ -597,13 +629,14 @@ public class FootballEntity extends Entity {
     private void applySpin(Player player) {
         double radius = this.getBbWidth() / 2.0D;
 
+        // Every strike resets spin. Without this, a missed raycast leaves the
+        // previous strike's spin in place and a dead-centre hit curves anyway.
+        this.spin = 0.0F;
+
         Vec3 eye = player.getEyePosition();
         Vec3 look = player.getLookAngle();
         Vec3 reach = eye.add(look.scale(6.0D));
 
-        // Where the aim ray enters the ball's box. Empty if it misses, which
-        // should not happen given hurt() fired -- but lag between the client's aim
-        // and the server's copy of the ball position makes it possible.
         this.getBoundingBox().clip(eye, reach).ifPresent(hit -> {
             Vec3 centre = new Vec3(this.getX(), this.getY() + radius, this.getZ());
             Vec3 offset = hit.subtract(centre);

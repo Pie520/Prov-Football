@@ -1,5 +1,6 @@
-package com.p1emc.provfootball;
+package com.p1emc.provfootball.events;
 
+import com.p1emc.provfootball.ProvFootball;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -54,6 +55,8 @@ import java.util.concurrent.ConcurrentHashMap;
         LAST_POS.remove(id);
         MOMENTUM.remove(id);
     }
+
+
 
     // What everything else calls. Works from any server-side code with a
     // Player -- throws now, kicks and dribbling later.

@@ -1,7 +1,6 @@
 package com.p1emc.provfootball.item;
 
-import com.p1emc.provfootball.PlayerMomentumTracker;
-import com.p1emc.provfootball.ProvFootball;
+import com.p1emc.provfootball.events.PlayerMomentumTracker;
 import com.p1emc.provfootball.entity.FootballEntity;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -81,9 +80,6 @@ public class FootballItem extends Item {
             FootballEntity ball = new FootballEntity(level, spawn.x, spawn.y, spawn.z);
 
             Vec3 momentum = PlayerMomentumTracker.get(player);
-
-            ProvFootball.LOGGER.info("momentum={} sprinting={} pitch={}",
-                    momentum.length(), player.isSprinting(), player.getXRot());
 
 
             ball.setDeltaMovement(look.scale(THROW_SPEED).add(momentum.scale(MOMENTUM_SCALE)));

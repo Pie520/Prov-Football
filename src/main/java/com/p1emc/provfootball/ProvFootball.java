@@ -2,6 +2,8 @@ package com.p1emc.provfootball;
 
 import com.p1emc.provfootball.entity.ModEntities;
 import com.p1emc.provfootball.item.ModItems;
+import com.p1emc.provfootball.sound.ModSounds;
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
@@ -16,10 +18,13 @@ public class ProvFootball {
     public static final String MODID = "provfootball";
     public static final Logger LOGGER = LogUtils.getLogger();
 
+
     public ProvFootball(IEventBus modEventBus, ModContainer modContainer) {
         ModItems.ITEMS.register(modEventBus);
         ModEntities.ENTITY_TYPES.register(modEventBus);
-    //    ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
+        ModSounds.SOUNDS.register(modEventBus);
+
+        //    ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
 
 
         modEventBus.addListener(this::addCreative);
@@ -28,5 +33,9 @@ public class ProvFootball {
 
     private void addCreative(BuildCreativeModeTabContentsEvent event) {
 
+    }
+
+    public static ResourceLocation id(String path) {
+        return ResourceLocation.fromNamespaceAndPath(MODID, path);
     }
 }

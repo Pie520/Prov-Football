@@ -2,6 +2,7 @@ package com.p1emc.provfootball.client;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.mojang.math.Axis;
 import com.p1emc.provfootball.ProvFootball;
 import com.p1emc.provfootball.entity.FootballEntity;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -9,6 +10,7 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 
 public class FootballRenderer extends EntityRenderer<FootballEntity> {
 
@@ -39,12 +41,22 @@ public class FootballRenderer extends EntityRenderer<FootballEntity> {
                        PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
 
         poseStack.pushPose();
+        poseStack.translate(0.0F, -1.0F, 0.0F);
 
-        // Model root sits 16px above the entity's feet, shift it back down.
-        poseStack.translate(0.0F, -1F, 0.0F);
+        // Move the origin to the ball's centre before rotating, then put it back.
+        // Without this the ball orbits whatever point the stack is currently at.
+        float centre = 1F + entity.getBbHeight() / 2.0F;
+        poseStack.translate(0.0F, centre, 0.0F);
+
+        float axis = entity.rollAxis;
+        float roll = Mth.lerp(partialTick, entity.rollPrev, entity.roll);
+        poseStack.mulPose(Axis.YP.rotationDegrees(-axis));
+        poseStack.mulPose(Axis.ZP.rotationDegrees(-roll));
+        poseStack.mulPose(Axis.YP.rotationDegrees(axis));
+
+        poseStack.translate(0.0F, -centre, 0.0F);
 
         VertexConsumer vertexConsumer = buffer.getBuffer(this.model.renderType(TEXTURE));
-
         this.model.renderToBuffer(poseStack, vertexConsumer, packedLight,
                 OverlayTexture.NO_OVERLAY, 0xFFFFFFFF);
 

@@ -20,6 +20,8 @@ public class ModEntities {
                     .<FootballEntity>of(FootballEntity::new, MobCategory.MISC)
 
                     .sized(0.5F, 0.5F)
+                    .clientTrackingRange(10)
+                    .updateInterval(1)
 
 
                     .build("football"));

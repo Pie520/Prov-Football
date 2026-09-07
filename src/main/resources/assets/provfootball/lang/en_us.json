@@ -1,8 +1,12 @@
 {
   "itemGroup.examplemod": "Prov Football",
 
-  "item.provfootball.football": "Football"
+  "item.provfootball.football": "Football",
 
 
+  "key.provfootball.charge_shot": "Charge Shot",
+  "key.categories.provfootball": "Football",
+
+  "subtitles.provfootball.kick_ball": "Ball kicked"
 
 }

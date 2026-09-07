@@ -1,0 +1,8 @@
+{
+  "kick_ball": {
+    "subtitle": "subtitles.provfootball.kick_ball",
+    "sounds": [
+      { "name": "provfootball:kick_ball" }
+    ]
+  }
+}

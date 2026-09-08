@@ -31,6 +31,9 @@ public class FootballEntity extends Entity {
     // Tuning
     // ------------------------------------------------------------------
 
+    // Ticks after spawning during which the ball ignores contact
+    private int spawnGrace;
+
     // --- flight ---
     //higher = stronger gravity
     private static final double GRAVITY = 0.045D;
@@ -89,6 +92,36 @@ public class FootballEntity extends Entity {
     // Straight up if the ball is still, a chip if it was already moving
     private static final double FLICK_LIFT = 0.45D;
     private static final double FLICK_HORIZONTAL_KEEP = 0.25D;
+
+    // --- heading -------------------------------------------------------------
+// Contact-based
+//
+// A header redirects rather than replaces, reflect the incoming velocity
+// about the plane your head presents. A driven cross headed at goal keeps its
+// pace; a floated one does not. Crossing quality matters as a result, and a
+// glancing header can send the ball behind you, which is correct.
+    private static final double HEADER_RESTITUTION = 0.6D;
+
+    // A head is not a foot. Most force a header adds on its own, scaled by how
+// fast the player was moving.
+    private static final double HEADER_POWER = 0.18D;
+
+    // How far above and below eye level counts. Generous, since you are already
+// jumping to meet a moving ball.
+    private static final double HEADER_BAND_ABOVE = 0.6D;
+    private static final double HEADER_BAND_BELOW = 0.4D;
+
+    // You have to be closing on the ball, not merely near it. Without this a ball
+// drifting past your face while you happen to be jumping heads itself.
+    private static final double HEADER_APPROACH_DOT = 0.3D;
+
+    // How far out to look for a player to head it.
+    private static final double HEADER_REACH = 0.4D;
+
+    // Long enough that one jump is one header.
+    private static final int HEADER_COOLDOWN = 15;
+
+    private int headerCooldown;
 
     // --- curve ---
     // Higher deadzone means you need to aim closer to the balls edge for spin
@@ -181,6 +214,7 @@ public class FootballEntity extends Entity {
     public FootballEntity(Level level, double x, double y, double z) {
         this(ModEntities.FOOTBALL.get(), level);
         this.setPos(x, y, z);
+        this.spawnGrace = 5;
     }
 
 
@@ -289,9 +323,18 @@ public class FootballEntity extends Entity {
             this.kickCooldown--;
         }
 
+        if (this.headerCooldown > 0) {
+            this.headerCooldown--;
+        }
+
         if (this.dribbleCooldown > 0) {
             this.dribbleCooldown--;
         }
+        if (this.spawnGrace > 0) {
+            this.spawnGrace--;
+        }
+
+
 
         Vec3 motion = this.getDeltaMovement().add(0.0D, -GRAVITY, 0.0D);
 
@@ -310,7 +353,6 @@ public class FootballEntity extends Entity {
         double nx = after.x;
         double ny = after.y;
         double nz = after.z;
-
 
 
 
@@ -414,7 +456,10 @@ public class FootballEntity extends Entity {
         updateRoll(nx, nz);
 
         if (!this.level().isClientSide()) {
-            dribble();
+            // Heading first -- a ball at head height should not also be dribbled.
+            if (!tryHeader()) {
+                dribble();
+            }
         }
     }
 
@@ -475,7 +520,7 @@ public class FootballEntity extends Entity {
     //Actual dribbling mechanic
 
     private void dribble() {
-        if (this.dribbleCooldown > 0) {
+        if (this.dribbleCooldown > 0 || this.spawnGrace > 0) {
             return;
         }
 
@@ -551,6 +596,81 @@ public class FootballEntity extends Entity {
             // One touch per cooldown, even in a crowd.
             break;
         }
+    }
+
+
+    /**
+     * Contact heading. Runs every tick from tick(), like dribbling
+     *
+     * @return true if a header happened, so the caller can skip dribbling.
+     */
+    private boolean tryHeader() {
+        if (this.headerCooldown > 0 || this.spawnGrace > 0) {
+            return false;
+        }
+
+        double ballCentre = this.getY() + this.getBbHeight() / 2.0D;
+
+        for (Player player : this.level().getEntitiesOfClass(
+                Player.class, this.getBoundingBox().inflate(HEADER_REACH))) {
+
+            if (player.isSpectator() || player.onGround()) {
+                continue;
+            }
+
+            // A grounded ball can never pass this: it sits between y 0 and 0.5
+            // while eyes are at 1.62, so the bands cannot overlap. That is what
+            // makes the airborne check about jumping to MEET a ball rather than
+            // about heading anything at your feet.
+            double eye = player.getEyeY();
+            if (ballCentre > eye + HEADER_BAND_ABOVE || ballCentre < eye - HEADER_BAND_BELOW) {
+                continue;
+            }
+
+            // Must be moving INTO the ball. Jumping vertically beside it is not a
+            // header.
+            Vec3 momentum = PlayerMomentumTracker.get(player);
+            Vec3 toBall = new Vec3(
+                    this.getX() - player.getX(), 0.0D, this.getZ() - player.getZ());
+
+            if (momentum.lengthSqr() > 1.0E-6D && toBall.lengthSqr() > 1.0E-6D) {
+                if (momentum.normalize().dot(toBall.normalize()) < HEADER_APPROACH_DOT) {
+                    continue;
+                }
+            }
+
+            header(player, momentum);
+            return true;
+        }
+
+        return false;
+    }
+
+    private void header(Player player, Vec3 momentum) {
+        Vec3 incoming = this.getDeltaMovement();
+        Vec3 normal = player.getLookAngle();
+
+        // Standard reflection about the plane whose normal is the look vector:
+        //     r = v - 2(v . n)n
+        // dot(v, n) is how much of the velocity runs along your look axis;
+        // removing twice that flips it. Look straight into an incoming ball and it
+        // goes back the way it came; angle your head and it glances off.
+        Vec3 reflected = incoming.subtract(normal.scale(2.0D * incoming.dot(normal)));
+
+        reflected = reflected.scale(HEADER_RESTITUTION);
+
+        // Your own contribution, scaled by how fast you were moving.
+        double effort = Math.min(momentum.length() / 0.25D, 1.0D);
+        Vec3 added = normal.scale(HEADER_POWER * effort);
+
+        this.setDeltaMovement(reflected.add(added));
+
+        // Shares kickCooldown, so you cannot head a ball you just struck.
+        this.headerCooldown  = HEADER_COOLDOWN;
+
+        applySpin(player);
+        playKickSound(0.9F);
+        this.hasImpulse = true;
     }
 
 

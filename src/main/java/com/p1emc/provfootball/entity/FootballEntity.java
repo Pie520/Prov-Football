@@ -579,9 +579,10 @@ public class FootballEntity extends Entity {
         }
 
 
-        if (this.kickCooldown > 0) {
+        if (this.kickCooldown > 0 || this.headerCooldown > 0) {
             return true;
         }
+
         this.kickCooldown = ConfigCache.kickCooldown;
 
 // Shoot takes priority: a charged player who happens to be crouching should

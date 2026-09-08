@@ -11,8 +11,6 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
-import static com.p1emc.provfootball.ChargeConstants.DECAY_PER_TICK;
-
 @EventBusSubscriber(modid = ProvFootball.MODID, value = Dist.CLIENT)
 public class ChargeTracker {
 

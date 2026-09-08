@@ -13,4 +13,7 @@ public class ChargeConstants {
     //How long before decay begins
     public static final int RELEASE_GRACE = 5;
 
+
+    // Maximum speed reduction at full charge.
+    public static final double MAX_SLOWDOWN = 0.6D;
 }

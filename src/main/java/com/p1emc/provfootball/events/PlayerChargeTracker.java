@@ -5,9 +5,13 @@ import com.p1emc.provfootball.ProvFootball;
 import com.p1emc.provfootball.network.ChargeCancelPayload;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.ai.attributes.AttributeInstance;
+import net.minecraft.world.entity.ai.attributes.AttributeModifier;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -76,6 +80,7 @@ public class PlayerChargeTracker {
         GRACE.remove(id);
         START_PITCH.remove(id);
         HELD_TICKS.remove(id);
+        clearSlowdown(player);
     }
 
 
@@ -101,11 +106,18 @@ public class PlayerChargeTracker {
             if (held > ChargeConstants.MAX_CHARGE + 300) {
                 setCharging(player, false);
                 HELD_TICKS.remove(id);
-            }else if (player.level() instanceof ServerLevel serverLevel) {
-                spawnChargeParticles(serverLevel, player, held);
+                clearSlowdown(player);
+            }else {
+                //Slowdown Modifier
+                applySlowdown(player, held);
+
+                if (player.level() instanceof ServerLevel serverLevel) {
+                    spawnChargeParticles(serverLevel, player, held);
+                }
             }
         } else {
             HELD_TICKS.remove(id);
+            clearSlowdown(player);
         }
 
 
@@ -196,6 +208,40 @@ public class PlayerChargeTracker {
             DustParticleOptions dust = new DustParticleOptions(new Vector3f(r, g, b), 1.2F);
             level.sendParticles(dust, x, y, z, 1, 0.0D, 0.04D, 0.0D, 0.0D);
 
+        }
+    }
+
+
+    // Modifier id
+    private static final ResourceLocation SLOWDOWN_ID = ProvFootball.id("charge_slowdown");
+
+    /**
+     * Cost of power shots, the stronger the shot the slower and less agile the player becomes
+     */
+    private static void applySlowdown(Player player, int heldTicks) {
+        AttributeInstance speed = player.getAttribute(Attributes.MOVEMENT_SPEED);
+        if (speed == null) {
+            return;
+        }
+
+
+        speed.removeModifier(SLOWDOWN_ID);
+
+        float progress = Mth.clamp(
+                (float) heldTicks / ChargeConstants.MAX_CHARGE, 0.0F, 1.0F);
+
+        // Squared, not linear: near-free at the start, punishing at the end.
+        double factor = -ChargeConstants.MAX_SLOWDOWN * progress * progress;
+
+        speed.addTransientModifier(new AttributeModifier(
+                SLOWDOWN_ID, factor,
+                AttributeModifier.Operation.ADD_MULTIPLIED_TOTAL));
+    }
+
+    private static void clearSlowdown(Player player) {
+        AttributeInstance speed = player.getAttribute(Attributes.MOVEMENT_SPEED);
+        if (speed != null) {
+            speed.removeModifier(SLOWDOWN_ID);
         }
     }
 

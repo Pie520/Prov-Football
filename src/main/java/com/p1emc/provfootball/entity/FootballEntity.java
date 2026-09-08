@@ -23,6 +23,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.UUID;
+
 public class FootballEntity extends Entity {
 
     // ------------------------------------------------------------------
@@ -548,7 +550,14 @@ public class FootballEntity extends Entity {
                 / (ChargeConstants.MAX_CHARGE - ChargeConstants.MIN_CHARGE);
         t = Mth.clamp(t, 0.0F, 1.0F);
 
-        double power = Mth.lerp(t, SHOT_POWER_MIN, SHOT_POWER_MAX);
+// Blend of smoothstep and cubic. Smoothstep alone leaves the top of the bar
+// nearly flat; cubic alone kills the bottom half. Averaging keeps a live top
+// end while mid-charge still means something.
+        double smooth = t * t * (3.0D - 2.0D * t);
+        double cube = t * t * t;
+        double curve = (smooth + cube) / 2.0D;
+
+        double power = Mth.lerp(curve, SHOT_POWER_MIN, SHOT_POWER_MAX);
 
         // Elevation comes from where the player was looking when they STARTED
         // charging, not from where they are aiming now.
@@ -571,6 +580,7 @@ public class FootballEntity extends Entity {
         playKickSound(1f);
 
         PlayerChargeTracker.clear(player);
+
         this.hasImpulse = true;
     }
 

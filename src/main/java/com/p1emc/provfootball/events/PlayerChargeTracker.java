@@ -1,11 +1,10 @@
 package com.p1emc.provfootball.events;
 
-import com.p1emc.provfootball.ChargeConstants;
 import com.p1emc.provfootball.ProvFootball;
 import com.p1emc.provfootball.config.ConfigCache;
 import com.p1emc.provfootball.network.ChargeCancelPayload;
 import net.minecraft.core.particles.DustParticleOptions;
-import net.minecraft.core.particles.ParticleTypes;
+
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -64,7 +63,7 @@ public class PlayerChargeTracker {
     // Clamped by the caller, not here -- the handler is where untrusted input
     // arrives, so that's where it gets sanitised.
     public static void setCharge(Player player, int ticks) {
-        GRACE.put(player.getUUID(), ChargeConstants.RELEASE_GRACE);
+        GRACE.put(player.getUUID(), ConfigCache.releaseGrace);
         CHARGE.put(player.getUUID(), ticks);
     }
 
@@ -104,7 +103,7 @@ public class PlayerChargeTracker {
             int held = HELD_TICKS.merge(id, 1, Integer::sum);
 
             //Tick limit to prevent trails (timeout)
-            if (held > ChargeConstants.MAX_CHARGE + 300) {
+            if (held > ConfigCache.maxCharge + 300) {
                 setCharging(player, false);
                 HELD_TICKS.remove(id);
                 clearSlowdown(player);
@@ -130,7 +129,7 @@ public class PlayerChargeTracker {
 
         Integer current = CHARGE.get(id);
         if (current != null && current > 0) {
-            int next = current - ChargeConstants.DECAY_PER_TICK;
+            int next = current - ConfigCache.decayPerTick;
             if (next <= 0) {
                 CHARGE.remove(id);
             } else {
@@ -161,8 +160,6 @@ public class PlayerChargeTracker {
     // Ring radius around the player's feet. Wide enough to read from across the
 // pitch without swallowing them.
     private static final double PARTICLE_RADIUS = 0.55D;
-    public static final float ZONE_AMBER = ConfigCache.zoneAmber;
-    public static final float ZONE_RED = ConfigCache.zoneRed;
 
     /**
      * Charge particle system
@@ -173,10 +170,10 @@ public class PlayerChargeTracker {
 
     private static void spawnChargeParticles(ServerLevel level, Player player, int heldTicks) {
         float progress = Mth.clamp(
-                (float) heldTicks / ChargeConstants.MAX_CHARGE, 0.0F, 1.0F);
+                (float) heldTicks / ConfigCache.maxCharge, 0.0F, 1.0F);
 
         // Nothing until the shot is actually viable
-        if (heldTicks < ChargeConstants.MIN_CHARGE) {
+        if (heldTicks < ConfigCache.minCharge) {
             return;
         }
 
@@ -194,13 +191,13 @@ public class PlayerChargeTracker {
 
 // Progress through the USABLE range
 
-            float usable = (float) (heldTicks - ChargeConstants.MIN_CHARGE)
-                    / (ChargeConstants.MAX_CHARGE - ChargeConstants.MIN_CHARGE);
+            float usable = (float) (heldTicks - ConfigCache.minCharge)
+                    / (ConfigCache.maxCharge - ConfigCache.minCharge);
 
             float r, g, b;
-            if (usable >= ZONE_RED) {
+            if (usable >= ConfigCache.zoneRed) {
                 r = 1.0F; g = 0.2F; b = 0.2F;
-            } else if (usable >= ZONE_AMBER) {
+            } else if (usable >= ConfigCache.zoneAmber) {
                 r = 1.0F; g = 0.75F; b = 0.15F;
             } else {
                 r = 0.25F; g = 1.0F; b = 0.3F;
@@ -229,10 +226,10 @@ public class PlayerChargeTracker {
         speed.removeModifier(SLOWDOWN_ID);
 
         float progress = Mth.clamp(
-                (float) heldTicks / ChargeConstants.MAX_CHARGE, 0.0F, 1.0F);
+                (float) heldTicks / ConfigCache.maxCharge, 0.0F, 1.0F);
 
         // Squared, not linear: near-free at the start, punishing at the end.
-        double factor = -ChargeConstants.MAX_SLOWDOWN * progress * progress;
+        double factor = -ConfigCache.maxSlowdown * progress * progress;
 
         speed.addTransientModifier(new AttributeModifier(
                 SLOWDOWN_ID, factor,

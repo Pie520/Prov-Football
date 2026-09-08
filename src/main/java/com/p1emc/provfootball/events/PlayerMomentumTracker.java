@@ -13,39 +13,15 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-// Bus.GAME, NOT the default. PlayerTickEvent is a gameplay event; the mod bus
-// is for lifecycle and registration. Get this wrong and the handler silently
-// never fires -- no error, no warning, momentum just stays zero.
-@EventBusSubscriber(modid = ProvFootball.MODID)public class PlayerMomentumTracker {
+@EventBusSubscriber(modid = ProvFootball.MODID)
+public class PlayerMomentumTracker {
 
     /**
-    * Dribbling rework - allows for sharp turns by tracking how long a player has been moving
-    */
-
-    // How many consecutive ticks the player has been moving in a consistent direction.
+     * Dribbling rework - allows for sharp turns by tracking how long a player has been moving
+     */
 
     private static final Map<UUID, Vec3> LAST_DIRECTION = new ConcurrentHashMap<>();
     private static final Map<UUID, Float> SUSTAINED = new ConcurrentHashMap<>();
-
-    // Ticks of consistent motion to reach full commitment.
-    private static final float SUSTAIN_MAX = ConfigCache.sustainMax;
-
-    // Below this speed you are not really moving.
-    private static final double SUSTAIN_MIN_SPEED = ConfigCache.sustainMinSpeed;
-
-    // Dot product between this tick's direction and last tick's. Below this the
-// turn counts as a cut and the build-up drops sharply.
-// Gives you close control, since a sharp change of direction should produce a light
-// touch even at pace.
-    private static final double CUT_THRESHOLD = ConfigCache.cutThreshold;   // about 45 degrees
-
-    // Lost per tick when stopped. Decay rather than reset, so a feint or a moment
-// of hesitation does not cost you everything.
-    private static final float SUSTAIN_DECAY = ConfigCache.sustainDecay;
-
-    // How much a cut costs. Not a full reset -- you keep some momentum through a
-// turn, just not much.
-    private static final float CUT_PENALTY = ConfigCache.cutPenalty;
 
     // Keyed by UUID rather than holding Player objects, so a disconnecting
     // player can be garbage collected. Concurrent because the integrated
@@ -78,19 +54,19 @@ import java.util.concurrent.ConcurrentHashMap;
             float sustained = SUSTAINED.getOrDefault(id, 0.0F);
             double speed = movement.length();
 
-            if (speed > SUSTAIN_MIN_SPEED) {
+            if (speed > ConfigCache.sustainMinSpeed) {
                 Vec3 previous = LAST_DIRECTION.get(id);
                 Vec3 direction = movement.normalize();
 
-                if (previous != null && previous.dot(direction) < CUT_THRESHOLD) {
+                if (previous != null && previous.dot(direction) < ConfigCache.cutThreshold) {
                     // Sharp turn -- most of the build-up goes.
-                    sustained *= CUT_PENALTY;
+                    sustained *= ConfigCache.cutPenalty;
                 }
 
-                sustained = Math.min(sustained + 1.0F, SUSTAIN_MAX);
+                sustained = Math.min(sustained + 1.0F, ConfigCache.sustainMax);
                 LAST_DIRECTION.put(id, direction);
             } else {
-                sustained = Math.max(0.0F, sustained - SUSTAIN_DECAY);
+                sustained = Math.max(0.0F, sustained - ConfigCache.sustainDecay);
             }
 
             SUSTAINED.put(id, sustained);
@@ -120,6 +96,6 @@ import java.util.concurrent.ConcurrentHashMap;
 
     // 0.0 to 1.0, how committed the player's current run is.
     public static float getSustained(Player player) {
-        return SUSTAINED.getOrDefault(player.getUUID(), 0.0F) / SUSTAIN_MAX;
+        return SUSTAINED.getOrDefault(player.getUUID(), 0.0F) / ConfigCache.sustainMax;
     }
 }

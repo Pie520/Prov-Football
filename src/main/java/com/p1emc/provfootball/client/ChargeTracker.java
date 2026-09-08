@@ -1,7 +1,7 @@
 package com.p1emc.provfootball.client;
 
-import com.p1emc.provfootball.ChargeConstants;
 import com.p1emc.provfootball.ProvFootball;
+import com.p1emc.provfootball.config.ConfigCache;
 import com.p1emc.provfootball.network.ChargeReleasePayload;
 import com.p1emc.provfootball.network.ChargeStartPayload;
 import net.minecraft.client.Minecraft;
@@ -33,20 +33,20 @@ public class ChargeTracker {
 
         if (!held && wasHeld) {
             PacketDistributor.sendToServer(new ChargeReleasePayload(charge));
-            grace = ChargeConstants.RELEASE_GRACE;
+            grace = ConfigCache.releaseGrace;
         }
 
         wasHeld = held;
 
         if (held) {
             grace = 0;
-            if (charge < ChargeConstants.MAX_CHARGE) {
+            if (charge < ConfigCache.maxCharge) {
                 charge++;
             }
         } else if (grace > 0) {
             grace--;              // charge holds steady, mirroring the server
         } else if (charge > 0) {
-            charge = Math.max(0, charge - ChargeConstants.DECAY_PER_TICK);
+            charge = Math.max(0, charge - ConfigCache.decayPerTick);
         }
     }
 
@@ -55,7 +55,7 @@ public class ChargeTracker {
     }
 
     public static float getProgress() {
-        return (float) charge / ChargeConstants.MAX_CHARGE;
+        return (float) charge / ConfigCache.maxCharge;
     }
 
     public static void cancel() {

@@ -182,5 +182,6 @@ public class ConfigCache {
         throwSpeed = ProvFootballConfig.THROW_SPEED.get();
         throwMomentumScale = ProvFootballConfig.THROW_MOMENTUM_SCALE.get();
         pickupCooldown = ProvFootballConfig.PICKUP_COOLDOWN.get();
+
     }
 }

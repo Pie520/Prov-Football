@@ -27,7 +27,7 @@ public class ProvFootball {
         ModSounds.SOUNDS.register(modEventBus);
         modContainer.registerConfig(ModConfig.Type.SERVER, ProvFootballConfig.SPEC);
 
-        //    ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
+        //ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
 
 
         modEventBus.addListener(this::addCreative);

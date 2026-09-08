@@ -1,11 +1,8 @@
 package com.p1emc.provfootball.client;
 
-import com.p1emc.provfootball.ChargeConstants;
+import com.p1emc.provfootball.config.ConfigCache;
 import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.gui.GuiGraphics;
-
-import static com.p1emc.provfootball.events.PlayerChargeTracker.ZONE_AMBER;
-import static com.p1emc.provfootball.events.PlayerChargeTracker.ZONE_RED;
 
 public class ChargeHudOverlay {
 
@@ -58,18 +55,18 @@ public class ChargeHudOverlay {
         int filled = Math.round(BAR_WIDTH * progress);
 
         int colour;
-        if (charge < ChargeConstants.MIN_CHARGE) {
+        if (charge < ConfigCache.minCharge) {
             colour = COLOUR_WEAK;
         } else {
             // Same measure the particles use: progress through the USABLE range, not
             // the whole bar. The dead ticks below MIN_CHARGE are excluded so the bands
             // line up with what defenders see.
-            float usable = (float) (charge - ChargeConstants.MIN_CHARGE)
-                    / (ChargeConstants.MAX_CHARGE - ChargeConstants.MIN_CHARGE);
+            float usable = (float) (charge - ConfigCache.minCharge)
+                    / (ConfigCache.maxCharge - ConfigCache.minCharge);
 
-            if (usable >= ZONE_RED) {
+            if (usable >= ConfigCache.zoneRed) {
                 colour = COLOUR_FULL;
-            } else if (usable >= ZONE_AMBER) {
+            } else if (usable >= ConfigCache.zoneAmber) {
                 colour = COLOUR_HIGH;
             } else {
                 colour = COLOUR_READY;

@@ -1,6 +1,5 @@
 package com.p1emc.provfootball.entity;
 
-import com.p1emc.provfootball.ChargeConstants;
 import com.p1emc.provfootball.config.ConfigCache;
 import com.p1emc.provfootball.events.PlayerMomentumTracker;
 import com.p1emc.provfootball.item.ModItems;
@@ -28,163 +27,21 @@ import java.util.UUID;
 
 public class FootballEntity extends Entity {
 
-    // ------------------------------------------------------------------
-    // Tuning
-    // ------------------------------------------------------------------
 
-    // Ticks after spawning during which the ball ignores contact
     private int spawnGrace;
 
-    // --- flight ---
-    //higher = stronger gravity
-    private static final double GRAVITY = ConfigCache.gravity;
-    // lose % per tick per unit of speed
-    private static final double DRAG_COEFFICIENT = ConfigCache.dragCoefficient;
-    //Higher means ball travels further
-    private static final double GROUND_FRICTION = ConfigCache.groundFriction;
-
-// Restitution is not constant: a real ball deforms more on a hard impact and
-// loses proportionally more energy. So the ceiling applies to gentle bounces
-// and hard landings get taxed down toward the floor.
-    private static final double BOUNCE_VERTICAL = ConfigCache.bounceVertical;   // gentle-impact restitution
-    private static final double BOUNCE_FALLOFF = ConfigCache.bounceFalloff;    // how much hard impacts are punished
-    private static final double BOUNCE_MIN = ConfigCache.bounceMin;        // floor, so fast balls still bounce
-
-    //Higher means walls absorb less energy
-    private static final double BOUNCE_HORIZONTAL = ConfigCache.bounceHorizontal;
-    //Effect of bouncing on speed
-    private static final double BOUNCE_CROSS_AXIS = ConfigCache.bounceCrossAxis;
-    private static final double WALL_CROSS_AXIS = ConfigCache.wallCrossAxis;
     //Below this value speed is set to 0, avoids infinite sliding
     private static final double REST_THRESHOLD = 0.005D;
 
-    // --- passing ---
-    // Weaker shots, higher value here means stronger shot
-    private static final double STRIKE_POWER = ConfigCache.strikePower;
-    private static final double SPRINT_MOMENTUM = ConfigCache.sprintMomentum;
-    private static final double WALK_MOMENTUM = ConfigCache.walkMomentum;
-
-    // Aiming up should loft the ball meaningfully. STRIKE_POWER is tuned for how
-// far a flat pass rolls, and at that magnitude the vertical component is too
-// small to see -- roughly five ticks of rise against gravity. Scaling Y
-// separately gives controllable volleys without changing ground passes.
-    private static final double VOLLEY_LIFT = ConfigCache.volleyLift;
-
-    // Lower values make new strikes fully change ball directions
-    // Higher mean harder passes have a greater effect on the direction of the volley
-    private static final double INCOMING_BLEND = ConfigCache.incomingBlend;
-
-    // --- shooting ---
-    private static final double SHOT_POWER_MIN = ConfigCache.shotPowerMin;
-    private static final double SHOT_POWER_MAX = ConfigCache.shotPowerMax;
-
-    // How much of the shot's power goes upward at full elevation. Under 1.0 so a
-// lofted shot still carries forward rather than going near-vertical.
-    private static final double SHOT_LIFT = ConfigCache.shotLift;
-
-    // Hard ceiling on total speed, applied after every force this tick. Catches
-// anything that stacks, strikes, shots, bounces, Magnus
-    private static final double MAX_SPEED = ConfigCache.maxSpeed;
-
-    // Momentum normalised, angular only
-
-
-    // --- flick (crouch) ---
-    // Straight up if the ball is still, a chip if it was already moving
-    private static final double FLICK_LIFT = ConfigCache.flickLift;
-    private static final double FLICK_HORIZONTAL_KEEP = ConfigCache.flickHorizontalKeep;
-
-    // --- heading -------------------------------------------------------------
-// Contact-based
-//
-// A header redirects rather than replaces, reflect the incoming velocity
-// about the plane your head presents. A driven cross headed at goal keeps its
-// pace; a floated one does not. Crossing quality matters as a result, and a
-// glancing header can send the ball behind you, which is correct.
-    private static final double HEADER_RESTITUTION = ConfigCache.headerRestitution;
-
-    // A head is not a foot. Most force a header adds on its own, scaled by how
-// fast the player was moving.
-    private static final double HEADER_POWER = ConfigCache.headerPower;
-
-    // How far above and below eye level counts. Generous, since you are already
-// jumping to meet a moving ball.
-    private static final double HEADER_BAND_ABOVE = ConfigCache.headerBandAbove;
-    private static final double HEADER_BAND_BELOW = ConfigCache.headerBandBelow;
-
-    // You have to be closing on the ball, not merely near it. Without this a ball
-// drifting past your face while you happen to be jumping heads itself.
-    private static final double HEADER_APPROACH_DOT = ConfigCache.headerApproachDot;
-
-    // How far out to look for a player to head it.
-    private static final double HEADER_REACH = ConfigCache.headerReach;
-
-    // Long enough that one jump is one header.
-    private static final int HEADER_COOLDOWN = ConfigCache.headerCooldown;
 
     private int headerCooldown;
 
-    // --- curve ---
-    // Higher deadzone means you need to aim closer to the balls edge for spin
-    // Spin power is the amount of curve
-    private static final double STRIKE_DEADZONE = ConfigCache.strikeDeadzone;
-    private static final double SPIN_POWER = ConfigCache.spinPower;
-
-    // Lower this if the ball starts orbiting
-    private static final float SPIN_DECAY = ConfigCache.spinDecay;
-
-
-    // --- dribbling ---------------------------------------------------------
-// Only touch the ball when it is low enough to be at foot height.
-    private static final double DRIBBLE_MAX_HEIGHT = ConfigCache.dribbleMaxHeight;
-
-    // How close the player has to be. Their box inflated by this.
-    private static final double DRIBBLE_REACH = ConfigCache.dribbleReach;
-
-    // Touches are discrete, not continuous. Separate from kickCooldown so a
-// dribble touch never blocks a strike or vice versa.
-    private static final int DRIBBLE_COOLDOWN = ConfigCache.dribbleCooldown;
-
-    // Push per touch. Walking keeps the ball tight, sprinting shoves it further ahead
-    private static final double DRIBBLE_PUSH_WALK = ConfigCache.dribblePushWalk;
-    private static final double DRIBBLE_PUSH_SPRINT = ConfigCache.dribblePushSprint;
-
-    // A ball already moving faster than this ignores dribble touches, so an
-// incoming pass has to be controlled with a strike before you can carry it.
-    private static final double DRIBBLE_MAX_BALL_SPEED = ConfigCache.dribbleMaxBallSpeed;
-
-    // How much of the push follows the direction you are RUNNING versus the
-// direction from you to the ball. Lower values turn
-// more sharply, since the away-vector shoves the ball whichever way you cut.
-    private static final double DRIBBLE_MOVEMENT_BIAS = ConfigCache.dribbleMovementBias;
-
-    // Fraction of the ball's existing horizontal velocity that survives a touch.
-// Raise toward 1.0 for a looser, more momentum-driven dribble.
-    private static final double DRIBBLE_RETAIN = ConfigCache.dribbleRetain;
-
-    // Fine control. A player inching sideways should barely nudge the ball, the
-// way a real drag is a much lighter touch than a push into space. Without
-// this every touch is the same strength regardless of how fast you're moving,
-// so the dribble is a series of identical taps and slow adjustments overshoot.
-//
-// Fraction of a full-strength touch you get at a standstill.
-    private static final double DRIBBLE_MIN_TOUCH = ConfigCache.dribbleMinTouch;
-
-    // Movement speed at which a touch reaches full strength. Walking is roughly
-// 0.21 blocks/tick, so this is a normal walking pace.
-    private static final double DRIBBLE_FULL_TOUCH_SPEED = 0.30D;
 
     private int dribbleCooldown;
 
     // --- possession ---------------------------------------------------------
-// Who touched the ball last, shielding should only work for who touched it last
+
     private UUID lastToucher;
-
-    // --- shielding ----------------------------------------------------------
-// Dictates how strong challenges should be from the back.
-    //Higher values mean its easier to dispossess a player
-    private static final double SHIELD_MIN_MULTIPLIER = ConfigCache.shieldMinMultiplier;
-
 
     // Rolling animation state. Client-visual only, derived from velocity, nothing
 // here is synced, because tick() runs on both sides and each computes its own.
@@ -287,7 +144,7 @@ public class FootballEntity extends Entity {
         if (this.level().isClientSide()) {
             return;
         }
-        float volume = (float) Mth.clamp(impact / MAX_SPEED, 0.1D, 0.8D);
+        float volume = (float) Mth.clamp(impact / ConfigCache.maxSpeed, 0.1D, 0.8D);
         this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                 ModSounds.KICK_BALL.get(), SoundSource.NEUTRAL,
                 volume, 0.8F + this.random.nextFloat() * 0.2F);
@@ -297,7 +154,7 @@ public class FootballEntity extends Entity {
         // Speed AFTER the velocity is set, so the sound matches what actually
         // happened rather than what was requested.
         double speed = this.getDeltaMovement().length();
-        float volume = (float) Mth.clamp(speed / MAX_SPEED, MIN_KICK_VOLUME, 1.0D) * volumeScale;
+        float volume = (float) Mth.clamp(speed / ConfigCache.maxSpeed, MIN_KICK_VOLUME, 1.0D) * volumeScale;
 
         // null as the first argument means "send to every nearby client" -- pass a
         // player there and that player is EXCLUDED, which is for prediction cases
@@ -337,7 +194,7 @@ public class FootballEntity extends Entity {
 
 
 
-        Vec3 motion = this.getDeltaMovement().add(0.0D, -GRAVITY, 0.0D);
+        Vec3 motion = this.getDeltaMovement().add(0.0D, -ConfigCache.gravity, 0.0D);
 
 
         this.xo = this.getX();
@@ -366,20 +223,20 @@ public class FootballEntity extends Entity {
             double impact = 0.0D;
 
             if (Math.abs(after.x) < 1.0E-5D && Math.abs(motion.x) > 0.02D) {
-                nx = -motion.x * BOUNCE_HORIZONTAL;
+                nx = -motion.x * ConfigCache.bounceHorizontal;
                 impact = Math.max(impact, Math.abs(motion.x));
                 hit = true;
             }
             if (Math.abs(after.z) < 1.0E-5D && Math.abs(motion.z) > 0.02D) {
-                nz = -motion.z * BOUNCE_HORIZONTAL;
+                nz = -motion.z * ConfigCache.bounceHorizontal;
                 impact = Math.max(impact, Math.abs(motion.z));
                 hit = true;
             }
 
             if (hit) {
-                nx *= WALL_CROSS_AXIS;
-                nz *= WALL_CROSS_AXIS;
-                ny *= WALL_CROSS_AXIS;
+                nx *= ConfigCache.wallCrossAxis;
+                nz *= ConfigCache.wallCrossAxis;
+                ny *= ConfigCache.wallCrossAxis;
                 playBounceSound(impact);
             }
         }
@@ -388,11 +245,11 @@ public class FootballEntity extends Entity {
         if (this.verticalCollision) {
             if (motion.y < -0.12D) {
                 double impact = Math.abs(motion.y);
-                double restitution = Math.max(BOUNCE_MIN, BOUNCE_VERTICAL - impact * BOUNCE_FALLOFF);
+                double restitution = Math.max(ConfigCache.bounceMin, ConfigCache.bounceVertical - impact * ConfigCache.bounceFalloff);
                 ny = impact * restitution;
 
-                nx *= BOUNCE_CROSS_AXIS;
-                nz *= BOUNCE_CROSS_AXIS;
+                nx *= ConfigCache.bounceCrossAxis;
+                nz *= ConfigCache.bounceCrossAxis;
 
                 playBounceSound(impact);
             } else {
@@ -406,11 +263,11 @@ public class FootballEntity extends Entity {
         // After the bounces, deliberately: friction should bleed the reflected
         // velocity, not the incoming one.
         if (this.onGround()) {
-            nx *= GROUND_FRICTION;
-            nz *= GROUND_FRICTION;
+            nx *= ConfigCache.groundFriction;
+            nz *= ConfigCache.groundFriction;
         } else {
             double speed = Math.sqrt(nx * nx + nz * nz);
-            double drag = 1.0 - (DRAG_COEFFICIENT * speed);
+            double drag = 1.0 - (ConfigCache.dragCoefficient * speed);
             drag = Math.max(drag, 0.90);   // floor, so it never reverses or stops dead
             nx *= drag;
             nz *= drag;
@@ -439,14 +296,14 @@ public class FootballEntity extends Entity {
                 nz += pz * this.spin * speed;
             }
 
-            this.spin *= SPIN_DECAY;
+            this.spin *= ConfigCache.spinDecay;
         }
 
         // Scale all three axes together so a capped ball still travels exactly
         // where it was aimed
         double speed = Math.sqrt(nx * nx + ny * ny + nz * nz);
-        if (speed > MAX_SPEED) {
-            double scale = MAX_SPEED / speed;
+        if (speed > ConfigCache.maxSpeed) {
+            double scale = ConfigCache.maxSpeed / speed;
             nx *= scale;
             ny *= scale;
             nz *= scale;
@@ -477,8 +334,6 @@ public class FootballEntity extends Entity {
 
 
     private double shieldMultiplier(Player challenger) {
-
-        System.out.println("owner=" + this.lastToucher + " challenger=" + challenger.getUUID());
 
         // Unowned, or this player owns it
         if (this.lastToucher == null || this.lastToucher.equals(challenger.getUUID())) {
@@ -511,7 +366,7 @@ public class FootballEntity extends Entity {
         // 1.0 = directly in front, 0 = side on, -1 = behind. Clamping the negative
         // half to zero gives full push face-on, half side-on, nothing from behind.
         double dot = facing.dot(toChallenger.normalize());
-        return Mth.clamp(dot, SHIELD_MIN_MULTIPLIER, 1.0D);
+        return Mth.clamp(dot, ConfigCache.shieldMinMultiplier, 1.0D);
     }
 
     private void setPossession(Player player) {
@@ -530,19 +385,19 @@ public class FootballEntity extends Entity {
         // Already moving too fast. Control it with a strike first.
         Vec3 current = this.getDeltaMovement();
         double ballSpeed = Math.sqrt(current.x * current.x + current.z * current.z);
-        if (ballSpeed > DRIBBLE_MAX_BALL_SPEED) {
+        if (ballSpeed > ConfigCache.dribbleMaxBallSpeed) {
             return;
         }
 
         for (Player player : this.level().getEntitiesOfClass(
-                Player.class, this.getBoundingBox().inflate(DRIBBLE_REACH))) {
+                Player.class, this.getBoundingBox().inflate(ConfigCache.dribbleReach))) {
 
             if (player.isSpectator()) {
                 continue;
             }
 
 // Only touch the ball at foot height
-            if (this.getY() - player.getY() > DRIBBLE_MAX_HEIGHT) {
+            if (this.getY() - player.getY() > ConfigCache.dribbleMaxHeight) {
                 continue;
             }
 
@@ -570,24 +425,23 @@ public class FootballEntity extends Entity {
             }
             away = away.normalize();
 
-            Vec3 dir = movementDir.scale(DRIBBLE_MOVEMENT_BIAS)
-                    .add(away.scale(1.0D - DRIBBLE_MOVEMENT_BIAS))
+            Vec3 dir = movementDir.scale(ConfigCache.dribbleMovementBias)
+                    .add(away.scale(1.0D - ConfigCache.dribbleMovementBias))
                     .normalize();
 
-            double push = player.isSprinting() ? DRIBBLE_PUSH_SPRINT : DRIBBLE_PUSH_WALK;
+            double push = player.isSprinting() ? ConfigCache.dribblePushSprint : ConfigCache.dribblePushWalk;
 
 // Replaces the instantaneous-speed scaling. A committed run pushes the ball
 // properly ahead and a quick adjustment barely moves it.
             float sustained = PlayerMomentumTracker.getSustained(player);
-            double effort = Mth.lerp(sustained, DRIBBLE_MIN_TOUCH, 1.0D);
+            double effort = Mth.lerp(sustained, ConfigCache.dribbleMinTouch, 1.0D);
 
             push *= effort * pushMultiplier;
 
-            System.out.println("mult=" + pushMultiplier + " push=" + push);
 
-            Vec3 kept = this.getDeltaMovement().multiply(DRIBBLE_RETAIN, 1.0D, DRIBBLE_RETAIN);
+            Vec3 kept = this.getDeltaMovement().multiply(ConfigCache.dribbleRetain, 1.0D, ConfigCache.dribbleRetain);
             this.setDeltaMovement(kept.add(dir.scale(push)));
-            this.dribbleCooldown = DRIBBLE_COOLDOWN;
+            this.dribbleCooldown = ConfigCache.dribbleCooldown;
             this.hasImpulse = true;
 
 
@@ -613,7 +467,7 @@ public class FootballEntity extends Entity {
         double ballCentre = this.getY() + this.getBbHeight() / 2.0D;
 
         for (Player player : this.level().getEntitiesOfClass(
-                Player.class, this.getBoundingBox().inflate(HEADER_REACH))) {
+                Player.class, this.getBoundingBox().inflate(ConfigCache.headerReach))) {
 
             if (player.isSpectator() || player.onGround()) {
                 continue;
@@ -624,7 +478,7 @@ public class FootballEntity extends Entity {
             // makes the airborne check about jumping to MEET a ball rather than
             // about heading anything at your feet.
             double eye = player.getEyeY();
-            if (ballCentre > eye + HEADER_BAND_ABOVE || ballCentre < eye - HEADER_BAND_BELOW) {
+            if (ballCentre > eye + ConfigCache.headerBandAbove || ballCentre < eye - ConfigCache.headerBandBelow) {
                 continue;
             }
 
@@ -635,7 +489,7 @@ public class FootballEntity extends Entity {
                     this.getX() - player.getX(), 0.0D, this.getZ() - player.getZ());
 
             if (momentum.lengthSqr() > 1.0E-6D && toBall.lengthSqr() > 1.0E-6D) {
-                if (momentum.normalize().dot(toBall.normalize()) < HEADER_APPROACH_DOT) {
+                if (momentum.normalize().dot(toBall.normalize()) < ConfigCache.headerApproachDot) {
                     continue;
                 }
             }
@@ -658,16 +512,16 @@ public class FootballEntity extends Entity {
         // goes back the way it came; angle your head and it glances off.
         Vec3 reflected = incoming.subtract(normal.scale(2.0D * incoming.dot(normal)));
 
-        reflected = reflected.scale(HEADER_RESTITUTION);
+        reflected = reflected.scale(ConfigCache.headerRestitution);
 
         // Your own contribution, scaled by how fast you were moving.
         double effort = Math.min(momentum.length() / 0.25D, 1.0D);
-        Vec3 added = normal.scale(HEADER_POWER * effort);
+        Vec3 added = normal.scale(ConfigCache.headerPower * effort);
 
         this.setDeltaMovement(reflected.add(added));
 
         // Shares kickCooldown, so you cannot head a ball you just struck.
-        this.headerCooldown  = HEADER_COOLDOWN;
+        this.headerCooldown  = ConfigCache.headerCooldown;
 
         applySpin(player);
         playKickSound(0.9F);
@@ -728,13 +582,13 @@ public class FootballEntity extends Entity {
         if (this.kickCooldown > 0) {
             return true;
         }
-        this.kickCooldown = 3;
+        this.kickCooldown = ConfigCache.kickCooldown;
 
 // Shoot takes priority: a charged player who happens to be crouching should
 // shoot, not flick.
         int charge = PlayerChargeTracker.getCharge(player);
 
-        if (charge >= ChargeConstants.MIN_CHARGE) {
+        if (charge >= ConfigCache.minCharge) {
             shoot(player, charge);
         } else if (player.isCrouching()) {
             flick(player);
@@ -756,8 +610,8 @@ public class FootballEntity extends Entity {
     private void shoot(Player player, int charge) {
         Vec3 look = player.getLookAngle();
 
-        float t = (float) (charge - ChargeConstants.MIN_CHARGE)
-                / (ChargeConstants.MAX_CHARGE - ChargeConstants.MIN_CHARGE);
+        float t = (float) (charge - ConfigCache.minCharge)
+                / (ConfigCache.maxCharge - ConfigCache.minCharge);
         t = Mth.clamp(t, 0.0F, 1.0F);
 
 // Blend of smoothstep and cubic. Smoothstep alone leaves the top of the bar
@@ -767,7 +621,7 @@ public class FootballEntity extends Entity {
         double cube = t * t * t;
         double curve = (smooth + cube) / 2.0D;
 
-        double power = Mth.lerp(curve, SHOT_POWER_MIN, SHOT_POWER_MAX);
+        double power = Mth.lerp(curve, ConfigCache.shotPowerMin, ConfigCache.shotPowerMax);
 
         // Elevation comes from where the player was looking when they STARTED
         // charging, not from where they are aiming now.
@@ -783,7 +637,7 @@ public class FootballEntity extends Entity {
 
         this.setDeltaMovement(
                 flat.x * power,
-                elevation * power * SHOT_LIFT,
+                elevation * power * ConfigCache.shotLift,
                 flat.z * power);
 
         applySpin(player);
@@ -806,20 +660,20 @@ public class FootballEntity extends Entity {
 
         // Momentum keeps its MAGNITUDE here -- that is what makes a running strike
         // travel further than a standing one.
-        double weight = player.isSprinting() ? SPRINT_MOMENTUM : WALK_MOMENTUM;
+        double weight = player.isSprinting() ? ConfigCache.sprintMomentum : ConfigCache.walkMomentum;
 
         // Blend rather than replace. Aim dominates, but the ball's existing
         // velocity carries through, so a volley off a hard pass beats one struck
         // from a standstill. Horizontal only -- inheriting the fall speed of a
         // dropping ball would drive every volley into the floor.
 
-        Vec3 aim = look.scale(STRIKE_POWER);
-        Vec3 incoming = this.getDeltaMovement().multiply(1.0D, 0.0D, 1.0D).scale(INCOMING_BLEND);
+        Vec3 aim = look.scale(ConfigCache.strikePower);
+        Vec3 incoming = this.getDeltaMovement().multiply(1.0D, 0.0D, 1.0D).scale(ConfigCache.incomingBlend);
         Vec3 flat = momentum.scale(weight).add(incoming);
 
         this.setDeltaMovement(
                 aim.x + flat.x,
-                aim.y * VOLLEY_LIFT,
+                aim.y * ConfigCache.volleyLift,
                 aim.z + flat.z);
 
         applySpin(player);
@@ -839,9 +693,9 @@ public class FootballEntity extends Entity {
         Vec3 current = this.getDeltaMovement();
 
         this.setDeltaMovement(
-                current.x * FLICK_HORIZONTAL_KEEP,
-                FLICK_LIFT,
-                current.z * FLICK_HORIZONTAL_KEEP);
+                current.x * ConfigCache.flickHorizontalKeep,
+                ConfigCache.flickLift,
+                current.z * ConfigCache.flickHorizontalKeep);
 
         applySpin(player);
         playKickSound(1F);
@@ -853,7 +707,7 @@ public class FootballEntity extends Entity {
     /**
      * Curve, from where on the ball the player struck it horizontally. Hit the
      * right side and it hooks left: your foot pushes that side away and the spin
-     * brings it back. If it bends the wrong way, negate SPIN_POWER.
+     * brings it back. If it bends the wrong way, negate ConfigCache.spinPower.
      *
      * Only the horizontal axis is used. The vertical offset is unusable in
      * practice -- from a standing player the top face of the ball dominates the
@@ -881,18 +735,18 @@ public class FootballEntity extends Entity {
             Vec3 right = new Vec3(-look.z, 0.0D, look.x).normalize();
 
             double h = deadzone(offset.dot(right) / radius);
-            this.spin = (float) (-h * SPIN_POWER);
+            this.spin = (float) (-h * ConfigCache.spinPower);
         });
     }
 
     private static double deadzone(double value) {
-        if (Math.abs(value) < STRIKE_DEADZONE) {
+        if (Math.abs(value) < ConfigCache.strikeDeadzone) {
             return 0.0D;
         }
         // Rescale so the effect starts from zero at the deadzone edge, rather than
         // jumping straight to 0.15 worth of curve on leaving it.
         double sign = Math.signum(value);
-        double scaled = (Math.abs(value) - STRIKE_DEADZONE) / (1.0D - STRIKE_DEADZONE);
+        double scaled = (Math.abs(value) - ConfigCache.strikeDeadzone) / (1.0D - ConfigCache.strikeDeadzone);
         return sign * Mth.clamp(scaled, 0.0D, 1.0D);
     }
 }

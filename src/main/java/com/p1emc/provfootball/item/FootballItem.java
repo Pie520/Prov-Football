@@ -61,12 +61,6 @@ public class FootballItem extends Item {
         return InteractionResult.CONSUME;
     }
 
-    //Edit this to change the throwing power
-    private static final double THROW_SPEED = ConfigCache.throwSpeed;
-
-    //Momentum added by walking and sprinting, then multiplied by this
-    private static final double MOMENTUM_SCALE = ConfigCache.throwMomentumScale;
-
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
         ItemStack stack = player.getItemInHand(hand);
@@ -85,7 +79,8 @@ public class FootballItem extends Item {
             Vec3 momentum = PlayerMomentumTracker.get(player);
 
 
-            ball.setDeltaMovement(look.scale(THROW_SPEED).add(momentum.scale(MOMENTUM_SCALE)));
+            ball.setDeltaMovement(look.scale(ConfigCache.throwSpeed)
+                    .add(momentum.scale(ConfigCache.throwMomentumScale)));
 
 
             serverLevel.addFreshEntity(ball);

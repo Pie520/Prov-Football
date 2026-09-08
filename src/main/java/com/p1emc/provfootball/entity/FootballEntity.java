@@ -101,9 +101,7 @@ public class FootballEntity extends Entity {
 
 
     // --- dribbling ---------------------------------------------------------
-// Only touch the ball when it is low enough to be at foot height. A ball at
-// chest height being jogged along looks magnetic rather than kicked -- it has
-// to be volleyed instead.
+// Only touch the ball when it is low enough to be at foot height.
     private static final double DRIBBLE_MAX_HEIGHT = 0.4D;
 
     // How close the player has to be. Their box inflated by this.
@@ -111,29 +109,48 @@ public class FootballEntity extends Entity {
 
     // Touches are discrete, not continuous. Separate from kickCooldown so a
 // dribble touch never blocks a strike or vice versa.
-    private static final int DRIBBLE_COOLDOWN = 2;
+    private static final int DRIBBLE_COOLDOWN = 3;
 
-    // Push per touch. Walking keeps the ball tight; sprinting shoves it further
-// ahead, so you cover ground faster but the ball is looser and easier to
-// intercept. That trade is the point.
-    private static final double DRIBBLE_PUSH_WALK = 0.10D;
+    // Push per touch. Walking keeps the ball tight, sprinting shoves it further ahead
+    private static final double DRIBBLE_PUSH_WALK = 0.14D;
     private static final double DRIBBLE_PUSH_SPRINT = 0.24D;
 
     // A ball already moving faster than this ignores dribble touches, so an
 // incoming pass has to be controlled with a strike before you can carry it.
-// Without this you could accelerate a pass just by standing in its way.
     private static final double DRIBBLE_MAX_BALL_SPEED = 0.26D;
 
     // How much of the push follows the direction you are RUNNING versus the
 // direction from you to the ball. Lower values turn
 // more sharply, since the away-vector shoves the ball whichever way you cut.
-    private static final double DRIBBLE_MOVEMENT_BIAS = 0.2D;
+    private static final double DRIBBLE_MOVEMENT_BIAS = 0.3D;
 
     // Fraction of the ball's existing horizontal velocity that survives a touch.
 // Raise toward 1.0 for a looser, more momentum-driven dribble.
     private static final double DRIBBLE_RETAIN = 0.6D;
 
+    // Fine control. A player inching sideways should barely nudge the ball, the
+// way a real drag is a much lighter touch than a push into space. Without
+// this every touch is the same strength regardless of how fast you're moving,
+// so the dribble is a series of identical taps and slow adjustments overshoot.
+//
+// Fraction of a full-strength touch you get at a standstill.
+    private static final double DRIBBLE_MIN_TOUCH = 0.1D;
+
+    // Movement speed at which a touch reaches full strength. Walking is roughly
+// 0.21 blocks/tick, so this is a normal walking pace.
+    private static final double DRIBBLE_FULL_TOUCH_SPEED = 0.30D;
+
     private int dribbleCooldown;
+
+    // --- possession ---------------------------------------------------------
+// Who touched the ball last, shielding should only work for who touched it last
+    private UUID lastToucher;
+
+    // --- shielding ----------------------------------------------------------
+// Dictates how strong challenges should be from the back.
+    //Higher values mean its easier to dispossess a player
+    private static final double SHIELD_MIN_MULTIPLIER = 0.0D;
+
 
     // Rolling animation state. Client-visual only, derived from velocity, nothing
 // here is synced, because tick() runs on both sides and each computes its own.
@@ -405,6 +422,58 @@ public class FootballEntity extends Entity {
     /**
      * Dribbling
      */
+
+    /**
+     * How much a challenge survives the current owner's shield.
+     * 1.0 if unshielded or if they are directly in front of the shielder, going
+     * to 0 behind, you cannot reach through someone's back.
+     */
+
+
+    private double shieldMultiplier(Player challenger) {
+
+        System.out.println("owner=" + this.lastToucher + " challenger=" + challenger.getUUID());
+
+        // Unowned, or this player owns it
+        if (this.lastToucher == null || this.lastToucher.equals(challenger.getUUID())) {
+            return 1.0D;
+        }
+
+        Player owner = this.level().getPlayerByUUID(this.lastToucher);
+        if (owner == null || owner.isSpectator()) {
+            return 1.0D;
+        }
+
+        // Sprinting means the ball is running loose ahead of you hence no shielding
+        if (owner.isSprinting()) {
+            return 1.0D;
+        }
+
+        // Only shielding if they are actually near the ball.
+        if (owner.distanceToSqr(this) > 4.0D) {
+            return 1.0D;
+        }
+
+        Vec3 facing = owner.getLookAngle().multiply(1.0D, 0.0D, 1.0D).normalize();
+        Vec3 toChallenger = new Vec3(
+                challenger.getX() - owner.getX(), 0.0D, challenger.getZ() - owner.getZ());
+
+        if (toChallenger.lengthSqr() < 1.0E-4D) {
+            return 1.0D;
+        }
+
+        // 1.0 = directly in front, 0 = side on, -1 = behind. Clamping the negative
+        // half to zero gives full push face-on, half side-on, nothing from behind.
+        double dot = facing.dot(toChallenger.normalize());
+        return Mth.clamp(dot, SHIELD_MIN_MULTIPLIER, 1.0D);
+    }
+
+    private void setPossession(Player player) {
+        this.lastToucher = player.getUUID();
+    }
+
+    //Actual dribbling mechanic
+
     private void dribble() {
         if (this.dribbleCooldown > 0) {
             return;
@@ -439,9 +508,16 @@ public class FootballEntity extends Entity {
                 continue;
             }
 
+// Shielding: if someone else is walking with this ball, a challenger only
+// gets a touch to the extent they've got in front of them.
+            double pushMultiplier = shieldMultiplier(player);
+            if (pushMultiplier <= 0.0D) {
+                continue;
+            }
+
             Vec3 movementDir = momentum.normalize();
 
-            // Away from the player, horizontal only.
+// Away from the player, horizontal only.
             Vec3 away = new Vec3(this.getX() - player.getX(), 0.0D, this.getZ() - player.getZ());
             if (away.lengthSqr() < 1.0E-4D) {
                 away = player.getLookAngle().multiply(1.0D, 0.0D, 1.0D);
@@ -454,10 +530,23 @@ public class FootballEntity extends Entity {
 
             double push = player.isSprinting() ? DRIBBLE_PUSH_SPRINT : DRIBBLE_PUSH_WALK;
 
+// Replaces the instantaneous-speed scaling. A committed run pushes the ball
+// properly ahead and a quick adjustment barely moves it.
+            float sustained = PlayerMomentumTracker.getSustained(player);
+            double effort = Mth.lerp(sustained, DRIBBLE_MIN_TOUCH, 1.0D);
+
+            push *= effort * pushMultiplier;
+
+            System.out.println("mult=" + pushMultiplier + " push=" + push);
+
             Vec3 kept = this.getDeltaMovement().multiply(DRIBBLE_RETAIN, 1.0D, DRIBBLE_RETAIN);
             this.setDeltaMovement(kept.add(dir.scale(push)));
             this.dribbleCooldown = DRIBBLE_COOLDOWN;
             this.hasImpulse = true;
+
+
+            //Keep track of who touched the ball last
+            setPossession(player);
 
             // One touch per cooldown, even in a crowd.
             break;

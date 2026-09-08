@@ -1,6 +1,7 @@
 package com.p1emc.provfootball.entity;
 
 import com.p1emc.provfootball.ChargeConstants;
+import com.p1emc.provfootball.config.ConfigCache;
 import com.p1emc.provfootball.events.PlayerMomentumTracker;
 import com.p1emc.provfootball.item.ModItems;
 import com.p1emc.provfootball.events.PlayerChargeTracker;
@@ -36,62 +37,62 @@ public class FootballEntity extends Entity {
 
     // --- flight ---
     //higher = stronger gravity
-    private static final double GRAVITY = 0.045D;
+    private static final double GRAVITY = ConfigCache.gravity;
     // lose % per tick per unit of speed
-    private static final double DRAG_COEFFICIENT = 0.03D;
+    private static final double DRAG_COEFFICIENT = ConfigCache.dragCoefficient;
     //Higher means ball travels further
-    private static final double GROUND_FRICTION = 0.93D;
+    private static final double GROUND_FRICTION = ConfigCache.groundFriction;
 
 // Restitution is not constant: a real ball deforms more on a hard impact and
 // loses proportionally more energy. So the ceiling applies to gentle bounces
 // and hard landings get taxed down toward the floor.
-    private static final double BOUNCE_VERTICAL = 0.70D;   // gentle-impact restitution
-    private static final double BOUNCE_FALLOFF = 0.30D;    // how much hard impacts are punished
-    private static final double BOUNCE_MIN = 0.35D;        // floor, so fast balls still bounce
+    private static final double BOUNCE_VERTICAL = ConfigCache.bounceVertical;   // gentle-impact restitution
+    private static final double BOUNCE_FALLOFF = ConfigCache.bounceFalloff;    // how much hard impacts are punished
+    private static final double BOUNCE_MIN = ConfigCache.bounceMin;        // floor, so fast balls still bounce
 
     //Higher means walls absorb less energy
-    private static final double BOUNCE_HORIZONTAL = 0.70D;
+    private static final double BOUNCE_HORIZONTAL = ConfigCache.bounceHorizontal;
     //Effect of bouncing on speed
-    private static final double BOUNCE_CROSS_AXIS = 0.85D;
-    private static final double WALL_CROSS_AXIS = 0.9D;
+    private static final double BOUNCE_CROSS_AXIS = ConfigCache.bounceCrossAxis;
+    private static final double WALL_CROSS_AXIS = ConfigCache.wallCrossAxis;
     //Below this value speed is set to 0, avoids infinite sliding
     private static final double REST_THRESHOLD = 0.005D;
 
     // --- passing ---
     // Weaker shots, higher value here means stronger shot
-    private static final double STRIKE_POWER = 0.3D;
-    private static final double SPRINT_MOMENTUM = 0.6D;
-    private static final double WALK_MOMENTUM = 1D;
+    private static final double STRIKE_POWER = ConfigCache.strikePower;
+    private static final double SPRINT_MOMENTUM = ConfigCache.sprintMomentum;
+    private static final double WALK_MOMENTUM = ConfigCache.walkMomentum;
 
     // Aiming up should loft the ball meaningfully. STRIKE_POWER is tuned for how
 // far a flat pass rolls, and at that magnitude the vertical component is too
 // small to see -- roughly five ticks of rise against gravity. Scaling Y
 // separately gives controllable volleys without changing ground passes.
-    private static final double VOLLEY_LIFT = 1.5D;
+    private static final double VOLLEY_LIFT = ConfigCache.volleyLift;
 
     // Lower values make new strikes fully change ball directions
     // Higher mean harder passes have a greater effect on the direction of the volley
-    private static final double INCOMING_BLEND = 0.25D;
+    private static final double INCOMING_BLEND = ConfigCache.incomingBlend;
 
     // --- shooting ---
-    private static final double SHOT_POWER_MIN = 0.65D;
-    private static final double SHOT_POWER_MAX = 1.4D;
+    private static final double SHOT_POWER_MIN = ConfigCache.shotPowerMin;
+    private static final double SHOT_POWER_MAX = ConfigCache.shotPowerMax;
 
     // How much of the shot's power goes upward at full elevation. Under 1.0 so a
 // lofted shot still carries forward rather than going near-vertical.
-    private static final double SHOT_LIFT = 0.75D;
+    private static final double SHOT_LIFT = ConfigCache.shotLift;
 
     // Hard ceiling on total speed, applied after every force this tick. Catches
 // anything that stacks, strikes, shots, bounces, Magnus
-    private static final double MAX_SPEED = 1.6D;
+    private static final double MAX_SPEED = ConfigCache.maxSpeed;
 
     // Momentum normalised, angular only
 
 
     // --- flick (crouch) ---
     // Straight up if the ball is still, a chip if it was already moving
-    private static final double FLICK_LIFT = 0.45D;
-    private static final double FLICK_HORIZONTAL_KEEP = 0.25D;
+    private static final double FLICK_LIFT = ConfigCache.flickLift;
+    private static final double FLICK_HORIZONTAL_KEEP = ConfigCache.flickHorizontalKeep;
 
     // --- heading -------------------------------------------------------------
 // Contact-based
@@ -100,66 +101,66 @@ public class FootballEntity extends Entity {
 // about the plane your head presents. A driven cross headed at goal keeps its
 // pace; a floated one does not. Crossing quality matters as a result, and a
 // glancing header can send the ball behind you, which is correct.
-    private static final double HEADER_RESTITUTION = 0.6D;
+    private static final double HEADER_RESTITUTION = ConfigCache.headerRestitution;
 
     // A head is not a foot. Most force a header adds on its own, scaled by how
 // fast the player was moving.
-    private static final double HEADER_POWER = 0.18D;
+    private static final double HEADER_POWER = ConfigCache.headerPower;
 
     // How far above and below eye level counts. Generous, since you are already
 // jumping to meet a moving ball.
-    private static final double HEADER_BAND_ABOVE = 0.6D;
-    private static final double HEADER_BAND_BELOW = 0.4D;
+    private static final double HEADER_BAND_ABOVE = ConfigCache.headerBandAbove;
+    private static final double HEADER_BAND_BELOW = ConfigCache.headerBandBelow;
 
     // You have to be closing on the ball, not merely near it. Without this a ball
 // drifting past your face while you happen to be jumping heads itself.
-    private static final double HEADER_APPROACH_DOT = 0.3D;
+    private static final double HEADER_APPROACH_DOT = ConfigCache.headerApproachDot;
 
     // How far out to look for a player to head it.
-    private static final double HEADER_REACH = 0.4D;
+    private static final double HEADER_REACH = ConfigCache.headerReach;
 
     // Long enough that one jump is one header.
-    private static final int HEADER_COOLDOWN = 15;
+    private static final int HEADER_COOLDOWN = ConfigCache.headerCooldown;
 
     private int headerCooldown;
 
     // --- curve ---
     // Higher deadzone means you need to aim closer to the balls edge for spin
     // Spin power is the amount of curve
-    private static final double STRIKE_DEADZONE = 0.15D;
-    private static final double SPIN_POWER = 0.05D;
+    private static final double STRIKE_DEADZONE = ConfigCache.strikeDeadzone;
+    private static final double SPIN_POWER = ConfigCache.spinPower;
 
     // Lower this if the ball starts orbiting
-    private static final float SPIN_DECAY = 0.98F;
+    private static final float SPIN_DECAY = ConfigCache.spinDecay;
 
 
     // --- dribbling ---------------------------------------------------------
 // Only touch the ball when it is low enough to be at foot height.
-    private static final double DRIBBLE_MAX_HEIGHT = 0.4D;
+    private static final double DRIBBLE_MAX_HEIGHT = ConfigCache.dribbleMaxHeight;
 
     // How close the player has to be. Their box inflated by this.
-    private static final double DRIBBLE_REACH = 0.2D;
+    private static final double DRIBBLE_REACH = ConfigCache.dribbleReach;
 
     // Touches are discrete, not continuous. Separate from kickCooldown so a
 // dribble touch never blocks a strike or vice versa.
-    private static final int DRIBBLE_COOLDOWN = 3;
+    private static final int DRIBBLE_COOLDOWN = ConfigCache.dribbleCooldown;
 
     // Push per touch. Walking keeps the ball tight, sprinting shoves it further ahead
-    private static final double DRIBBLE_PUSH_WALK = 0.14D;
-    private static final double DRIBBLE_PUSH_SPRINT = 0.24D;
+    private static final double DRIBBLE_PUSH_WALK = ConfigCache.dribblePushWalk;
+    private static final double DRIBBLE_PUSH_SPRINT = ConfigCache.dribblePushSprint;
 
     // A ball already moving faster than this ignores dribble touches, so an
 // incoming pass has to be controlled with a strike before you can carry it.
-    private static final double DRIBBLE_MAX_BALL_SPEED = 0.26D;
+    private static final double DRIBBLE_MAX_BALL_SPEED = ConfigCache.dribbleMaxBallSpeed;
 
     // How much of the push follows the direction you are RUNNING versus the
 // direction from you to the ball. Lower values turn
 // more sharply, since the away-vector shoves the ball whichever way you cut.
-    private static final double DRIBBLE_MOVEMENT_BIAS = 0.3D;
+    private static final double DRIBBLE_MOVEMENT_BIAS = ConfigCache.dribbleMovementBias;
 
     // Fraction of the ball's existing horizontal velocity that survives a touch.
 // Raise toward 1.0 for a looser, more momentum-driven dribble.
-    private static final double DRIBBLE_RETAIN = 0.6D;
+    private static final double DRIBBLE_RETAIN = ConfigCache.dribbleRetain;
 
     // Fine control. A player inching sideways should barely nudge the ball, the
 // way a real drag is a much lighter touch than a push into space. Without
@@ -167,7 +168,7 @@ public class FootballEntity extends Entity {
 // so the dribble is a series of identical taps and slow adjustments overshoot.
 //
 // Fraction of a full-strength touch you get at a standstill.
-    private static final double DRIBBLE_MIN_TOUCH = 0.1D;
+    private static final double DRIBBLE_MIN_TOUCH = ConfigCache.dribbleMinTouch;
 
     // Movement speed at which a touch reaches full strength. Walking is roughly
 // 0.21 blocks/tick, so this is a normal walking pace.
@@ -182,7 +183,7 @@ public class FootballEntity extends Entity {
     // --- shielding ----------------------------------------------------------
 // Dictates how strong challenges should be from the back.
     //Higher values mean its easier to dispossess a player
-    private static final double SHIELD_MIN_MULTIPLIER = 0.0D;
+    private static final double SHIELD_MIN_MULTIPLIER = ConfigCache.shieldMinMultiplier;
 
 
     // Rolling animation state. Client-visual only, derived from velocity, nothing
@@ -214,7 +215,7 @@ public class FootballEntity extends Entity {
     public FootballEntity(Level level, double x, double y, double z) {
         this(ModEntities.FOOTBALL.get(), level);
         this.setPos(x, y, z);
-        this.spawnGrace = 5;
+        this.spawnGrace = ConfigCache.spawnGrace;
     }
 
 
@@ -270,7 +271,7 @@ public class FootballEntity extends Entity {
             player.drop(stack, false);
         }
 
-        player.getCooldowns().addCooldown(ModItems.FOOTBALL.get(), 60);
+        player.getCooldowns().addCooldown(ModItems.FOOTBALL.get(), ConfigCache.pickupCooldown);
         this.discard();
 
         return InteractionResult.CONSUME;
@@ -495,7 +496,7 @@ public class FootballEntity extends Entity {
         }
 
         // Only shielding if they are actually near the ball.
-        if (owner.distanceToSqr(this) > 4.0D) {
+        if (owner.distanceToSqr(this) > ConfigCache.shieldRadiusSqr) {
             return 1.0D;
         }
 

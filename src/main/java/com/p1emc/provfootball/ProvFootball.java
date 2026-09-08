@@ -3,7 +3,9 @@ package com.p1emc.provfootball;
 import com.p1emc.provfootball.entity.ModEntities;
 import com.p1emc.provfootball.item.ModItems;
 import com.p1emc.provfootball.sound.ModSounds;
+import com.p1emc.provfootball.config.ProvFootballConfig;
 import net.minecraft.resources.ResourceLocation;
+import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
 import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
@@ -23,6 +25,7 @@ public class ProvFootball {
         ModItems.ITEMS.register(modEventBus);
         ModEntities.ENTITY_TYPES.register(modEventBus);
         ModSounds.SOUNDS.register(modEventBus);
+        modContainer.registerConfig(ModConfig.Type.SERVER, ProvFootballConfig.SPEC);
 
         //    ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
 

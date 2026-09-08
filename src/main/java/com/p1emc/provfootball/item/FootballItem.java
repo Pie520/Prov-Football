@@ -1,5 +1,6 @@
 package com.p1emc.provfootball.item;
 
+import com.p1emc.provfootball.config.ConfigCache;
 import com.p1emc.provfootball.events.PlayerMomentumTracker;
 import com.p1emc.provfootball.entity.FootballEntity;
 import net.minecraft.core.BlockPos;
@@ -61,10 +62,10 @@ public class FootballItem extends Item {
     }
 
     //Edit this to change the throwing power
-    private static final double THROW_SPEED = 0.5D;
+    private static final double THROW_SPEED = ConfigCache.throwSpeed;
 
     //Momentum added by walking and sprinting, then multiplied by this
-    private static final double MOMENTUM_SCALE = 0.5D;
+    private static final double MOMENTUM_SCALE = ConfigCache.throwMomentumScale;
 
     @Override
     public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {

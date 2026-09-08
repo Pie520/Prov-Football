@@ -2,6 +2,7 @@ package com.p1emc.provfootball.events;
 
 import com.p1emc.provfootball.ChargeConstants;
 import com.p1emc.provfootball.ProvFootball;
+import com.p1emc.provfootball.config.ConfigCache;
 import com.p1emc.provfootball.network.ChargeCancelPayload;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
@@ -160,8 +161,8 @@ public class PlayerChargeTracker {
     // Ring radius around the player's feet. Wide enough to read from across the
 // pitch without swallowing them.
     private static final double PARTICLE_RADIUS = 0.55D;
-    public static final float ZONE_AMBER = 0.34F;
-    public static final float ZONE_RED = 0.67F;
+    public static final float ZONE_AMBER = ConfigCache.zoneAmber;
+    public static final float ZONE_RED = ConfigCache.zoneRed;
 
     /**
      * Charge particle system

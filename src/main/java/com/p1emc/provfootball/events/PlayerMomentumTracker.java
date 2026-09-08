@@ -1,6 +1,7 @@
 package com.p1emc.provfootball.events;
 
 import com.p1emc.provfootball.ProvFootball;
+import com.p1emc.provfootball.config.ConfigCache;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -27,24 +28,24 @@ import java.util.concurrent.ConcurrentHashMap;
     private static final Map<UUID, Float> SUSTAINED = new ConcurrentHashMap<>();
 
     // Ticks of consistent motion to reach full commitment.
-    private static final float SUSTAIN_MAX = 8.0F;
+    private static final float SUSTAIN_MAX = ConfigCache.sustainMax;
 
     // Below this speed you are not really moving.
-    private static final double SUSTAIN_MIN_SPEED = 0.04D;
+    private static final double SUSTAIN_MIN_SPEED = ConfigCache.sustainMinSpeed;
 
     // Dot product between this tick's direction and last tick's. Below this the
 // turn counts as a cut and the build-up drops sharply.
 // Gives you close control, since a sharp change of direction should produce a light
 // touch even at pace.
-    private static final double CUT_THRESHOLD = 0.7D;   // about 45 degrees
+    private static final double CUT_THRESHOLD = ConfigCache.cutThreshold;   // about 45 degrees
 
     // Lost per tick when stopped. Decay rather than reset, so a feint or a moment
 // of hesitation does not cost you everything.
-    private static final float SUSTAIN_DECAY = 1.5F;
+    private static final float SUSTAIN_DECAY = ConfigCache.sustainDecay;
 
     // How much a cut costs. Not a full reset -- you keep some momentum through a
 // turn, just not much.
-    private static final float CUT_PENALTY = 0.35F;
+    private static final float CUT_PENALTY = ConfigCache.cutPenalty;
 
     // Keyed by UUID rather than holding Player objects, so a disconnecting
     // player can be garbage collected. Concurrent because the integrated

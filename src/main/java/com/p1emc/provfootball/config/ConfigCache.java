@@ -52,6 +52,7 @@ public class ConfigCache {
     public static double shotPowerMin;
     public static double shotPowerMax;
     public static double shotLift;
+    public static double shotMaxElevation;
 
     // --- charge ---
     public static int maxCharge;
@@ -139,6 +140,7 @@ public class ConfigCache {
         shotPowerMin = ProvFootballConfig.SHOT_POWER_MIN.get();
         shotPowerMax = ProvFootballConfig.SHOT_POWER_MAX.get();
         shotLift = ProvFootballConfig.SHOT_LIFT.get();
+        shotMaxElevation = ProvFootballConfig.SHOT_MAX_ELEVATION.get();
 
         maxCharge = ProvFootballConfig.MAX_CHARGE.get();
         minCharge = ProvFootballConfig.MIN_CHARGE.get();

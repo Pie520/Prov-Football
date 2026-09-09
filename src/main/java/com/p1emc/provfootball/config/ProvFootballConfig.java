@@ -43,6 +43,7 @@ public class ProvFootballConfig {
     public static final ModConfigSpec.DoubleValue SHOT_POWER_MIN;
     public static final ModConfigSpec.DoubleValue SHOT_POWER_MAX;
     public static final ModConfigSpec.DoubleValue SHOT_LIFT;
+    public static final ModConfigSpec.DoubleValue SHOT_MAX_ELEVATION;
 
     // --- charge ---
     public static final ModConfigSpec.IntValue MAX_CHARGE;
@@ -266,8 +267,8 @@ public class ProvFootballConfig {
                 .comment("Fraction of the ball's radius that counts as centre.",
                         "Strikes inside this go straight. Raise it if every pass",
                         "picks up drift from aim jitter.",
-                        "Default: 0.15 (0.0 - 0.9)")
-                .defineInRange("deadzone", 0.15D, 0.0D, 0.9D);
+                        "Default: 0.05 (0.0 - 0.9)")
+                .defineInRange("deadzone", 0.05D, 0.0D, 0.9D);
 
         SPIN_POWER = b
                 .comment("Spin imparted by a full edge strike. The Magnus force is",
@@ -312,6 +313,15 @@ public class ProvFootballConfig {
                         "lofted shot still carries forward.",
                         "Default: 0.8 (0.0 - 3.0)")
                 .defineInRange("lift", 0.8D, 0.0D, 3.0D);
+
+
+        SHOT_MAX_ELEVATION = b
+                .comment("Degrees above the horizon that give maximum lift. 45 is the",
+                        "physical maximum-range launch angle, so aiming steeper gains",
+                        "nothing. Raise it to spread the same lift across a wider aim",
+                        "range and make specific elevations easier to hit.",
+                        "Default: 45.0 (5.0 - 90.0)")
+                .defineInRange("maxElevation", 45.0D, 5.0D, 90.0D);
 
         b.pop();
 

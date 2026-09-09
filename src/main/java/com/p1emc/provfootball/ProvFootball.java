@@ -1,6 +1,7 @@
 package com.p1emc.provfootball;
 
 import com.p1emc.provfootball.entity.ModEntities;
+import com.p1emc.provfootball.item.ModCreativeTabs;
 import com.p1emc.provfootball.item.ModItems;
 import com.p1emc.provfootball.sound.ModSounds;
 import com.p1emc.provfootball.config.ProvFootballConfig;
@@ -27,7 +28,7 @@ public class ProvFootball {
         ModSounds.SOUNDS.register(modEventBus);
         modContainer.registerConfig(ModConfig.Type.SERVER, ProvFootballConfig.SPEC);
 
-        //ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
+        ModCreativeTabs.CREATIVE_MODE_TABS.register(modEventBus);
 
 
         modEventBus.addListener(this::addCreative);

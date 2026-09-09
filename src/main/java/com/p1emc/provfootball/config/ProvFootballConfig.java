@@ -500,8 +500,8 @@ public class ProvFootballConfig {
         HEADER_POWER = b
                 .comment("Most force a header adds on its own, scaled by how fast",
                         "the player was moving.",
-                        "Default: 0.18 (0.0 - 1.0)")
-                .defineInRange("power", 0.18D, 0.0D, 1.0D);
+                        "Default: 0.25 (0.0 - 1.0)")
+                .defineInRange("power", 0.25D, 0.0D, 1.0D);
 
         HEADER_BAND_ABOVE = b
                 .comment("How far above eye level still counts as a header.",

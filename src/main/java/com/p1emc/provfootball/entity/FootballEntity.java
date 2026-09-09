@@ -631,7 +631,7 @@ public class FootballEntity extends Entity {
         // getXRot() is -90 straight up, 0 at the horizon, +90 down. Negate so that
         // looking up is positive, then clamp: 45 degrees or more gives full lift,
         // looking level or below gives none.
-        double elevation = Mth.clamp(-startPitch / 45.0F, 0.0D, 1.0D);
+        double elevation = Mth.clamp(-startPitch / ConfigCache.shotMaxElevation, 0.0D, 1.0D);
 
         // Horizontal direction still comes from the strike itself
         Vec3 flat = new Vec3(look.x, 0.0D, look.z).normalize();

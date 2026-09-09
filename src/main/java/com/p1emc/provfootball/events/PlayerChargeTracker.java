@@ -60,7 +60,7 @@ public class PlayerChargeTracker {
         return CHARGING.getOrDefault(player.getUUID(), false);
     }
 
-    // Clamped by the caller, not here -- the handler is where untrusted input
+    // Clamped by the caller, not here, the handler is where untrusted input
     // arrives, so that's where it gets sanitised.
     public static void setCharge(Player player, int ticks) {
         GRACE.put(player.getUUID(), ConfigCache.releaseGrace);
@@ -102,15 +102,12 @@ public class PlayerChargeTracker {
         if (isCharging(player)) {
             int held = HELD_TICKS.merge(id, 1, Integer::sum);
 
-            //Tick limit to prevent trails (timeout)
             if (held > ConfigCache.maxCharge + 300) {
                 setCharging(player, false);
                 HELD_TICKS.remove(id);
                 clearSlowdown(player);
-            }else {
-                //Slowdown Modifier
+            } else {
                 applySlowdown(player, held);
-
                 if (player.level() instanceof ServerLevel serverLevel) {
                     spawnChargeParticles(serverLevel, player, held);
                 }
@@ -118,6 +115,16 @@ public class PlayerChargeTracker {
         } else {
             HELD_TICKS.remove(id);
             clearSlowdown(player);
+
+            // Keep the telegraph alive through the decay. A shooter can release, wait
+            // for the keeper to commit, then strike late at reduced power, so the
+            // keeper needs to see the charge draining rather than losing the read at
+            // the exact moment the feint happens.
+            Integer decaying = CHARGE.get(id);
+            if (decaying != null && decaying > 0
+                    && player.level() instanceof ServerLevel serverLevel) {
+                spawnChargeParticles(serverLevel, player, decaying);
+            }
         }
 
 

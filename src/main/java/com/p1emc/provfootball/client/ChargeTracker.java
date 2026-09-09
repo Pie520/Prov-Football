@@ -11,23 +11,33 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.network.PacketDistributor;
 
+
+
+
 @EventBusSubscriber(modid = ProvFootball.MODID, value = Dist.CLIENT)
 public class ChargeTracker {
 
     private static int charge;
     private static boolean wasHeld;
     private static int grace;
+    private static float startPitch;
+
+
+
 
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
 
         boolean held = ModKeyBindings.CHARGE_SHOT.isDown();
 
+
+
         if (held && !wasHeld) {
 
             charge = 0;
             grace = 0;
             float pitch = Minecraft.getInstance().player.getXRot();
+            startPitch = pitch;
             PacketDistributor.sendToServer(new ChargeStartPayload(pitch));
         }
 
@@ -58,10 +68,16 @@ public class ChargeTracker {
         return (float) charge / ConfigCache.maxCharge;
     }
 
+    public static float getStartPitch() {
+        return startPitch;
+    }
+
     public static void cancel() {
         charge = 0;
         // Prevents the release check firing on the next tick and sending a stale
         // charge value back to the server.
         wasHeld = false;
     }
+
+
 }

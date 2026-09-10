@@ -28,6 +28,11 @@ sourceSets.main.resources {
 
 repositories {
     // Add here additional repositories if required by some of the dependencies below.
+    mavenCentral()
+    maven {
+        name = 'RedlanceMinecraft'
+        url = 'https://repo.redlance.org/public'
+    }
 }
 
 base {
@@ -115,7 +120,22 @@ configurations {
     runtimeClasspath.extendsFrom localRuntime
 }
 
+
 dependencies {
+
+
+    // PAL's core declares its own versions of libraries Minecraft already
+    // ships -- gson, slf4j, fastutil, netty -- all pinned by Minecraft with
+    // {strictly} and therefore not negotiable. Declaring both PAL artifacts
+    // non-transitively takes the library without its dependency demands;
+    // Minecraft provides those at runtime anyway.
+    implementation("com.zigythebird.playeranim:PlayerAnimationLibNeo:${pal_version}") {
+        transitive = false
+    }
+    implementation("com.zigythebird.playeranim:PlayerAnimationLibCore:${pal_version}") {
+        transitive = false
+    }
+
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"

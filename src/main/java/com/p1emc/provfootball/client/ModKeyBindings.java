@@ -12,7 +12,7 @@ public class ModKeyBindings {
 
             InputConstants.Type.KEYSYM,
 
-            GLFW.GLFW_KEY_V,
+            GLFW.GLFW_KEY_C,
 
             "key.categories.provfootball");
 }

@@ -39,6 +39,11 @@ public class FootballEntity extends Entity {
 
     private int dribbleCooldown;
 
+    private UUID chopTracked;
+    private float chopLastYaw;
+    private float chopYawAccum;
+    private int chopCooldown;
+
     // --- possession ---------------------------------------------------------
 
     private UUID lastToucher;
@@ -156,9 +161,7 @@ public class FootballEntity extends Entity {
         double speed = this.getDeltaMovement().length();
         float volume = (float) Mth.clamp(speed / ConfigCache.maxSpeed, MIN_KICK_VOLUME, 1.0D) * volumeScale;
 
-        // null as the first argument means "send to every nearby client" -- pass a
-        // player there and that player is EXCLUDED, which is for prediction cases
-        // where they already played it locally.
+        // null as the first argument means "send to every nearby client"
         this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
                 ModSounds.KICK_BALL.get(), SoundSource.PLAYERS,
                 volume, 0.9F + this.random.nextFloat() * 0.2F);
@@ -190,6 +193,10 @@ public class FootballEntity extends Entity {
         }
         if (this.spawnGrace > 0) {
             this.spawnGrace--;
+        }
+
+        if (this.chopCooldown > 0) {
+            this.chopCooldown--;
         }
 
 
@@ -314,13 +321,15 @@ public class FootballEntity extends Entity {
         updateRoll(nx, nz);
 
         if (!this.level().isClientSide()) {
-            // Heading first -- a ball at head height should not also be dribbled.
+            // Before dribbling, so a flick registers on the same tick it happens.
+            trackChopYaw();
+
+            // Heading first, a ball at head height should not also be dribbled.
             if (!tryHeader()) {
                 dribble();
             }
         }
     }
-
 
     /**
      * Dribbling
@@ -331,8 +340,6 @@ public class FootballEntity extends Entity {
      * 1.0 if unshielded or if they are directly in front of the shielder, going
      * to 0 behind, you cannot reach through someone's back.
      */
-
-
     private double shieldMultiplier(Player challenger) {
 
         // Unowned, or this player owns it
@@ -373,19 +380,58 @@ public class FootballEntity extends Entity {
         this.lastToucher = player.getUUID();
     }
 
-    //Actual dribbling mechanic
+    /**
+     * Walk-to-sprint blend.
+     */
+    private static double loose(double walk, double sprint, double t) {
+        return walk + (sprint - walk) * t;
+    }
 
-    private void dribble() {
-        if (this.dribbleCooldown > 0 || this.spawnGrace > 0) {
+    /**
+     * Accumulates the ball owner's view swing, for chop detection.
+     *
+     * Keyed on lastToucher rather than on whoever happens to be in range
+     */
+    private void trackChopYaw() {
+        if (this.lastToucher == null) {
+            this.chopTracked = null;
+            this.chopYawAccum = 0.0F;
             return;
         }
 
+        Player owner = this.level().getPlayerByUUID(this.lastToucher);
+        if (owner == null) {
+            // Logged out, or in another dimension
+            this.chopTracked = null;
+            this.chopYawAccum = 0.0F;
+            return;
+        }
 
+        float yaw = owner.getYRot();
 
-        // Already moving too fast. Control it with a strike first.
-        Vec3 current = this.getDeltaMovement();
-        double ballSpeed = Math.sqrt(current.x * current.x + current.z * current.z);
-        if (ballSpeed > ConfigCache.dribbleMaxBallSpeed) {
+        // Possession changed
+        if (!owner.getUUID().equals(this.chopTracked)) {
+            this.chopTracked = owner.getUUID();
+            this.chopLastYaw = yaw;
+            this.chopYawAccum = 0.0F;
+            return;
+        }
+
+        // Decay first, then add
+        this.chopYawAccum *= (float) ConfigCache.dribbleChopDecay;
+
+        // Signed shortest-arc difference, so a flick left and a flick right are
+        // distinguishable
+        this.chopYawAccum += Mth.degreesDifference(this.chopLastYaw, yaw);
+        this.chopLastYaw = yaw;
+
+        if (Math.abs(this.chopYawAccum) < 0.01F) {
+            this.chopYawAccum = 0.0F;
+        }
+    }
+
+    private void dribble() {
+        if (this.spawnGrace > 0) {
             return;
         }
 
@@ -396,59 +442,213 @@ public class FootballEntity extends Entity {
                 continue;
             }
 
-// Only touch the ball at foot height
-            if (this.getY() - player.getY() > ConfigCache.dribbleMaxHeight) {
+            // Re-read per player
+            Vec3 current = this.getDeltaMovement();
+            Vec3 ballHorizontal = new Vec3(current.x, 0.0D, current.z);
+            double ballSpeed = ballHorizontal.length();
+
+            // Vertical band around the player's feet
+            double lift = player.getY() - this.getY();
+            if (lift > ConfigCache.dribbleStepOver
+                    || -lift > ConfigCache.dribbleMaxHeight) {
                 continue;
             }
 
-            Vec3 momentum = PlayerMomentumTracker.get(player);
-            double moved = momentum.length();
+            // The tracker smoothed over several ticks
+            Vec3 tracked = PlayerMomentumTracker.get(player).multiply(1.0D, 0.0D, 1.0D);
+            Vec3 instant = player.getDeltaMovement().multiply(1.0D, 0.0D, 1.0D);
+            double trackedSpeed = tracked.length();
+            double instantSpeed = instant.length();
 
-            // Standing still is not dribbling.
-            if (moved < 0.01D) {
+            Vec3 heading = Vec3.ZERO;
+            if (instantSpeed > 1.0E-4D) {
+                heading = heading.add(
+                        instant.scale(ConfigCache.dribbleInstantBlend / instantSpeed));
+            }
+            if (trackedSpeed > 1.0E-4D) {
+                heading = heading.add(
+                        tracked.scale((1.0D - ConfigCache.dribbleInstantBlend) / trackedSpeed));
+            }
+            if (heading.lengthSqr() < 1.0E-8D) {
+                continue;
+            }
+            Vec3 runDir = heading.normalize();
+
+            double playerSpeed = Math.max(trackedSpeed, instantSpeed);
+            if (playerSpeed < 0.004D) {
                 continue;
             }
 
-// Shielding: if someone else is walking with this ball, a challenger only
-// gets a touch to the extent they've got in front of them.
+            Vec3 toBall = new Vec3(
+                    this.getX() - player.getX(), 0.0D, this.getZ() - player.getZ());
+            double gap = toBall.length();
+
+            // Explicit range gate
+            if (gap > ConfigCache.dribbleReach) {
+                continue;
+            }
+
+            // Close control
+            double closeness = ConfigCache.dribbleCloseRadius <= 0.0D ? 0.0D
+                    : Mth.clamp(1.0D - gap / ConfigCache.dribbleCloseRadius, 0.0D, 1.0D);
+
             double pushMultiplier = shieldMultiplier(player);
             if (pushMultiplier <= 0.0D) {
                 continue;
             }
 
-            Vec3 movementDir = momentum.normalize();
+            double t = player.isSprinting() ? 1.0D : 0.0D;
 
-// Away from the player, horizontal only.
-            Vec3 away = new Vec3(this.getX() - player.getX(), 0.0D, this.getZ() - player.getZ());
-            if (away.lengthSqr() < 1.0E-4D) {
-                away = player.getLookAngle().multiply(1.0D, 0.0D, 1.0D);
+            // Clamped inside the carry range
+            double standoff = Math.min(
+                    loose(ConfigCache.dribbleStandoffWalk,
+                            ConfigCache.dribbleStandoffSprint, t),
+                    ConfigCache.dribbleReach * ConfigCache.dribbleStandoffMargin);
+            double gain = loose(
+                    ConfigCache.dribbleStandoffGainWalk,
+                    ConfigCache.dribbleStandoffGainSprint, t);
+
+            // --- chop ----------------------------------------------------------
+
+            boolean chop = this.chopCooldown <= 0
+                    && player.getUUID().equals(this.chopTracked)
+                    && closeness > 0.0D
+                    && playerSpeed > ConfigCache.dribbleChopMinSpeed
+                    && Math.abs(this.chopYawAccum) > ConfigCache.dribbleChopYaw;
+
+            if (chop) {
+
+                Vec3 lookDir = player.getLookAngle().multiply(1.0D, 0.0D, 1.0D);
+                if (lookDir.lengthSqr() > 1.0E-4D) {
+                    lookDir = lookDir.normalize();
+
+                    Vec3 target = new Vec3(player.getX(), 0.0D, player.getZ())
+                            .add(lookDir.scale(standoff));
+                    Vec3 shift = target.subtract(new Vec3(this.getX(), 0.0D, this.getZ()));
+
+                    Vec3 chopVel = shift.scale(1.0D / ConfigCache.dribbleChopTicks)
+                            .add(lookDir.scale(playerSpeed));
+
+                    if (t > 0.0D) {
+                        chopVel = chopVel.scale(ConfigCache.dribbleChopSprintScale);
+                    }
+
+                    double chopSpeed = chopVel.length();
+                    if (chopSpeed > ConfigCache.dribbleChopMaxSpeed) {
+                        chopVel = chopVel.scale(ConfigCache.dribbleChopMaxSpeed / chopSpeed);
+                    }
+
+                    this.setDeltaMovement(chopVel.x, current.y, chopVel.z);
+                    this.hasImpulse = true;
+
+                    this.chopCooldown = ConfigCache.dribbleChopCooldown;
+                    this.chopYawAccum = 0.0F;
+
+                    // Deliberately not setting dribbleCooldown
+                    setPossession(player);
+                    break;
+                }
             }
-            away = away.normalize();
 
-            Vec3 dir = movementDir.scale(ConfigCache.dribbleMovementBias)
-                    .add(away.scale(1.0D - ConfigCache.dribbleMovementBias))
-                    .normalize();
+            // Front arc
+            double arcDot = Mth.lerp(closeness,
+                    ConfigCache.dribbleFrontArcDot, ConfigCache.dribbleCloseArcDot);
+            boolean behind = gap > 1.0E-4D && toBall.scale(1.0D / gap).dot(runDir) < arcDot;
 
-            double push = player.isSprinting() ? ConfigCache.dribblePushSprint : ConfigCache.dribblePushWalk;
+            if (behind) {
+                // A ball behind you cannot be kicked forward
+                if (ballSpeed > ConfigCache.dribbleBehindRestSpeed) {
+                    Vec3 braked = ballHorizontal.scale(ConfigCache.dribbleBehindBrake);
+                    this.setDeltaMovement(braked.x, current.y, braked.z);
+                    this.dribbleCooldown = ConfigCache.dribbleCooldown;
+                    this.hasImpulse = true;
+                }
+                // Not a break, this ball may be in front of somebody else.
+                continue;
+            }
 
-// Replaces the instantaneous-speed scaling. A committed run pushes the ball
-// properly ahead and a quick adjustment barely moves it.
+            double ahead = toBall.dot(runDir);
+            double along = ballHorizontal.dot(runDir);
+            Vec3 lateral = ballHorizontal.subtract(runDir.scale(along));
+
+            // The ball is asked to travel at EXACTLY the player's pace
+            double desiredAlong = playerSpeed + (standoff - ahead) * gain;
+            desiredAlong = Math.max(desiredAlong, 0.0D);
+
+            // A cut may interrupt the tail of the cooldown, otherwise a turn
+            // reads as input lag.
+            boolean cutting = ballSpeed > ConfigCache.dribbleCutMinSpeed
+                    && ballHorizontal.scale(1.0D / ballSpeed).dot(runDir) < ConfigCache.dribbleCutDot;
+
+            if (this.dribbleCooldown > (cutting ? ConfigCache.dribbleCutInterrupt : 0)) {
+                continue;
+            }
+
+            // How hard this touch may change the ball's speed
             float sustained = PlayerMomentumTracker.getSustained(player);
-            double effort = Mth.lerp(sustained, ConfigCache.dribbleMinTouch, 1.0D);
+            double authority = Mth.lerp(sustained, ConfigCache.dribbleMinTouch, 1.0D);
 
-            push *= effort * pushMultiplier;
+            authority = Math.max(authority, closeness * ConfigCache.dribbleCloseAuthority);
+            authority *= pushMultiplier;
+
+            if (ballSpeed > desiredAlong + ConfigCache.dribbleControlMargin) {
+                authority *= ConfigCache.dribbleControlTouch;
+            }
+
+            double accel = ConfigCache.dribbleAccel * authority;
+            double decel = ConfigCache.dribbleDecel * authority;
+
+            double newAlong = along + Mth.clamp(desiredAlong - along, -decel, accel);
+
+            // Sideways skid bled off
+            double retainLateral = loose(
+                    ConfigCache.dribbleRetainLateralWalk,
+                    ConfigCache.dribbleRetainLateralSprint, t)
+                    * Mth.lerp(closeness, 1.0D, ConfigCache.dribbleCloseRetainScale);
+
+            Vec3 next = runDir.scale(newAlong).add(lateral.scale(retainLateral));
+
+            // Nudge back onto the run line
+            Vec3 offLine = toBall.subtract(runDir.scale(ahead));
+            double offset = offLine.length();
+            double deadzone = loose(
+                    ConfigCache.dribbleDeadzoneWalk, ConfigCache.dribbleDeadzoneSprint, t);
+
+            if (offset > deadzone) {
+                double pullScale = Mth.lerp(closeness, 1.0D, ConfigCache.dribbleClosePullScale);
+                double pull = Math.min(
+                        offset * loose(ConfigCache.dribblePullWalk,
+                                ConfigCache.dribblePullSprint, t) * pullScale,
+                        loose(ConfigCache.dribblePullMaxWalk,
+                                ConfigCache.dribblePullMaxSprint, t) * pullScale);
+                next = next.add(offLine.scale(-pull / offset));
+            }
+
+            // Sprinting only
+            double scatter = ConfigCache.dribbleScatter * t;
+            if (scatter > 0.0D) {
+                double kick = (this.random.nextDouble() * 2.0D - 1.0D) * scatter * playerSpeed;
+                next = next.add(runDir.z * kick, 0.0D, -runDir.x * kick);
+            }
+
+            // Never slows a ball that was already faster
+            double cap = Math.max(ConfigCache.dribbleSpeedCap, ballSpeed);
+            double nextSpeed = next.length();
+            if (nextSpeed > cap) {
+                next = next.scale(cap / nextSpeed);
+            }
 
 
-            Vec3 kept = this.getDeltaMovement().multiply(ConfigCache.dribbleRetain, 1.0D, ConfigCache.dribbleRetain);
-            this.setDeltaMovement(kept.add(dir.scale(push)));
+            boolean significant = next.subtract(ballHorizontal).lengthSqr() > 1.0E-4D;
+
+            this.setDeltaMovement(next.x, current.y, next.z);
             this.dribbleCooldown = ConfigCache.dribbleCooldown;
-            this.hasImpulse = true;
+            if (significant) {
+                this.hasImpulse = true;
+            }
 
-
-            //Keep track of who touched the ball last
             setPossession(player);
 
-            // One touch per cooldown, even in a crowd.
             break;
         }
     }
@@ -642,7 +842,17 @@ public class FootballEntity extends Entity {
                 flat.z * power);
 
         applySpin(player);
-        playKickSound(1f);
+        playKickSound(1.75f * (charge / ConfigCache.maxCharge));
+
+        float chargePercent = (float) charge / ConfigCache.maxCharge;
+
+        if (chargePercent >= ConfigCache.zoneRed) {
+
+            this.level().playSound(null, this.getX(), this.getY(), this.getZ(),
+                    SoundEvents.GENERIC_EXPLODE, SoundSource.PLAYERS,
+                    1, 0.7F + this.random.nextFloat() * 0.2F);
+        }
+
 
         PlayerChargeTracker.clear(player);
 
@@ -659,14 +869,11 @@ public class FootballEntity extends Entity {
         Vec3 look = player.getLookAngle();
         Vec3 momentum = PlayerMomentumTracker.get(player);
 
-        // Momentum keeps its MAGNITUDE here -- that is what makes a running strike
-        // travel further than a standing one.
+        // Momentum keeps its MAGNITUDE here
         double weight = player.isSprinting() ? ConfigCache.sprintMomentum : ConfigCache.walkMomentum;
 
         // Blend rather than replace. Aim dominates, but the ball's existing
-        // velocity carries through, so a volley off a hard pass beats one struck
-        // from a standstill. Horizontal only -- inheriting the fall speed of a
-        // dropping ball would drive every volley into the floor.
+        // velocity carries through
 
         Vec3 aim = look.scale(ConfigCache.strikePower);
         Vec3 incoming = this.getDeltaMovement().multiply(1.0D, 0.0D, 1.0D).scale(ConfigCache.incomingBlend);
@@ -706,14 +913,7 @@ public class FootballEntity extends Entity {
     }
 
     /**
-     * Curve, from where on the ball the player struck it horizontally. Hit the
-     * right side and it hooks left: your foot pushes that side away and the spin
-     * brings it back. If it bends the wrong way, negate ConfigCache.spinPower.
-     *
-     * Only the horizontal axis is used. The vertical offset is unusable in
-     * practice -- from a standing player the top face of the ball dominates the
-     * view, so nearly every strike reads as a maximum high hit and the lower half
-     * is almost impossible to target. Lift lives on crouch instead.
+     * Curve, from where on the ball the player struck it horizontally.
      */
     private void applySpin(Player player) {
         double radius = this.getBbWidth() / 2.0D;
@@ -730,9 +930,7 @@ public class FootballEntity extends Entity {
             Vec3 centre = new Vec3(this.getX(), this.getY() + radius, this.getZ());
             Vec3 offset = hit.subtract(centre);
 
-            // "Right" relative to the player's facing -- look crossed with world
-            // up. Without this, striking the east side of the ball would mean the
-            // same thing regardless of which way the player stands.
+            // "Right" relative to the player's facing
             Vec3 right = new Vec3(-look.z, 0.0D, look.x).normalize();
 
             double h = deadzone(offset.dot(right) / radius);
